@@ -20,6 +20,7 @@ NiCad*/systems/*--*blind-clones*/
 NiCad*/systems/**/*.xml
 NiCad*/systems/**/*.html
 NiCad*/systems/**/*.log
+NiCad*/systems/*/
 
 # ---- Conda / Python ----
 __pycache__/
