@@ -23,7 +23,7 @@ python display_clone_group_sizes.py \
 python 3_filter_out_group.py \
     --input ./data/step2_nicad_azure_sim0.7.jsonl \
     --output ./data/step3_nicad_azure_sim0.7.jsonl \
-    --min-size 1 --max-size 1000
+    --min-size 1 --max-size 20 \
     > ./data/step3_nicad_azure_sim0.7.log 2>&1
 
 python display_clone_group_sizes.py \
