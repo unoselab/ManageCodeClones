@@ -128,7 +128,10 @@ def process_stream(fin, fout, log_exclusions: bool = True):
     # Lists to hold stats
     loc_all, loc_kept, loc_excluded = [], [], []
     tok_all, tok_kept, tok_excluded = [], [], []
-
+    group_sizes_all: List[int] = []
+    group_sizes_kept: List[int] = []
+    group_sizes_excluded: List[int] = []
+    
     for line in fin:
         line = line.strip()
         if not line: continue
@@ -255,6 +258,23 @@ def print_dist_report(label: str, values: List[int], bucket_size: int, topk_exac
         for v, cnt in Counter(vals).most_common(topk_exact):
             print(f"[DIST]   {v}: {cnt}", file=sys.stderr)
 
+
+def print_group_size_dist(label: str, sizes: List[int]) -> None:
+    print(f"[GROUP] ===== {label} =====", file=sys.stderr)
+    if not sizes:
+        print("[GROUP] (empty)", file=sys.stderr)
+        return
+
+    cnt = Counter(sizes)
+    total = sum(cnt.values())
+
+    print(f"[GROUP] total groups: {total}", file=sys.stderr)
+    print(f"[GROUP] min/max size: {min(cnt)} / {max(cnt)}", file=sys.stderr)
+
+    for k in sorted(cnt):
+        print(f"[GROUP] size={k:>3} : {cnt[k]}", file=sys.stderr)
+
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -283,12 +303,17 @@ def main():
     print(f"[STATS] excluded    : {excluded}", file=sys.stderr)
 
     print_dist_report("LOC: ALL", loc_all, args.loc_bucket_size, args.loc_topk)
-    print_dist_report("LOC: KEPT", loc_kept, args.loc_bucket_size, args.loc_topk)
     print_dist_report("LOC: EXCLUDED", loc_excluded, args.loc_bucket_size, args.loc_topk)
 
     print_dist_report("TOK: ALL", tok_all, args.tok_bucket_size, args.tok_topk)
-    print_dist_report("TOK: KEPT", tok_kept, args.tok_bucket_size, args.tok_topk)
     print_dist_report("TOK: EXCLUDED", tok_excluded, args.tok_bucket_size, args.tok_topk)
+
+    print_group_size_dist("ALL clone groups (input)", group_sizes_all)
+    print_group_size_dist("EXCLUDED clone groups", group_sizes_excluded)
+
+    print_dist_report("LOC: KEPT", loc_kept, args.loc_bucket_size, args.loc_topk)
+    print_dist_report("TOK: KEPT", tok_kept, args.tok_bucket_size, args.tok_topk)
+    print_group_size_dist("REMAINING clone groups (output)", group_sizes_kept)
 
     print(f"[TIME] elapsed: {elapsed:.3f}s", file=sys.stderr)
 
