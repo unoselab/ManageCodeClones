@@ -30,3 +30,6 @@ python display_clone_group_sizes.py \
     --input ./data/step3_nicad_azure_sim0.7.jsonl \
     > ./data/display_clone_group_sizes2.log 2>&1
 
+python 4_gen_init_train_sample.py \
+    --input ./data/step3_nicad_azure_sim0.7.jsonl \
+    --output ./data/step4_nicad_azure_sim0.7.jsonl \
