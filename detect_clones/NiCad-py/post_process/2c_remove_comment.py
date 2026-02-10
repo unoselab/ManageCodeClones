@@ -4,15 +4,24 @@ import argparse
 import sys
 import tokenize
 import io
+import textwrap
 
 # -----------------------------------------------------------------------------
 # Method 1: AST (Abstract Syntax Tree)
 # Pros: Guarantees syntactically valid output.
-# Cons: Completely reformats the code (removes original whitespace/newlines).
+# Cons: completely reformats the code (removes original whitespace/newlines).
 # -----------------------------------------------------------------------------
 def remove_python_comments_ast(source_code):
+    # Attempt to parse. If indented, try dedenting.
     try:
         parsed = ast.parse(source_code)
+    except IndentationError:
+        try:
+            # Fix: Remove leading indentation so AST can parse it
+            source_code = textwrap.dedent(source_code)
+            parsed = ast.parse(source_code)
+        except SyntaxError:
+            return None
     except SyntaxError:
         return None
 
@@ -50,7 +59,10 @@ def remove_python_comments_tokenizer(code: str) -> str:
     if not code:
         return ""
 
-    src = code if code.endswith("\n") else code + "\n"
+    # Fix: Dedent code immediately for tokenization to avoid IndentationError
+    # We store the indentation to potentially add it back, but usually dedented is fine for analysis.
+    dedented_code = textwrap.dedent(code)
+    src = dedented_code if dedented_code.endswith("\n") else dedented_code + "\n"
 
     try:
         toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
@@ -91,8 +103,6 @@ def remove_python_comments_tokenizer(code: str) -> str:
 
         # 2) Remove docstring if STRING appears as first statement
         if tok.type == tokenize.STRING and (at_module_start or at_suite_start):
-            # Check previous token to ensure it's not an assignment (e.g. x = "doc")
-            # This is a basic heuristic; AST is safer, but this works for most standard docstrings
             i += 1
             if i < n and toks[i].type == tokenize.NEWLINE:
                 i += 1
@@ -109,7 +119,7 @@ def remove_python_comments_tokenizer(code: str) -> str:
 
     out = tokenize.untokenize(kept)
 
-    # Post-clean:
+    # Post-clean
     lines = out.splitlines()
     cleaned_lines = []
     for ln in lines:
@@ -126,35 +136,27 @@ def remove_python_comments_tokenizer(code: str) -> str:
 # Selection Logic
 # -----------------------------------------------------------------------------
 def clean_code_smart(original_code):
-    # Try both methods
-    res_ast = remove_python_comments_ast(original_code)
+    # Try tokenizer first (preferred for formatting)
     res_tok = remove_python_comments_tokenizer(original_code)
-
-    # Case 1: Both failed (e.g. invalid syntax in original)
-    if res_ast is None and res_tok is None:
-        return original_code
-
-    # Case 2: Only one succeeded
-    if res_ast is not None and res_tok is None:
-        return res_ast
-    if res_tok is not None and res_ast is None:
-        # Verify tokenizer output is valid python before returning
+    
+    if res_tok is not None:
+        # Validate that the tokenizer output is still valid Python
         try:
+            # We attempt to parse the cleaned code. 
+            # If it parses, it's safe to use.
             ast.parse(res_tok)
             return res_tok
-        except SyntaxError:
-            return original_code
+        except (SyntaxError, IndentationError):
+            pass # Tokenizer produced broken code, fall through to AST method
 
-    # Case 3: Both succeeded
-    # We prefer Tokenizer because it keeps formatting, BUT we must ensure
-    # it didn't break the code (which tokenize sometimes does with complex multiline logic).
-    try:
-        # Check validity of tokenizer output
-        ast.parse(res_tok)
-        return res_tok # It's valid and formatted well, choose this.
-    except SyntaxError:
-        # Tokenizer produced broken code, fallback to AST version
+    # Fallback to AST method
+    res_ast = remove_python_comments_ast(original_code)
+    
+    if res_ast is not None:
         return res_ast
+
+    # If both fail, return original (dedented to be clean at least)
+    return textwrap.dedent(original_code)
 
 # -----------------------------------------------------------------------------
 # Main Processing Loop
@@ -177,10 +179,15 @@ def process_jsonl(input_file, output_file):
                     for source_item in data['sources']:
                         if 'code' in source_item:
                             original = source_item['code']
-                            # Use the smart selector
                             cleaned = clean_code_smart(original)
                             source_item['code'] = cleaned
-                
+                            
+                            # Debug print for first item to verify fix
+                            if count == 0:
+                                print("--- First Item Cleaned Code Preview ---")
+                                print(cleaned)
+                                print("---------------------------------------")
+
                 outfile.write(json.dumps(data) + '\n')
                 count += 1
                 
@@ -190,7 +197,7 @@ def process_jsonl(input_file, output_file):
     print(f"Success! Processed {count} lines.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Remove Python comments/docstrings using hybrid AST/Tokenizer strategy.")
+    parser = argparse.ArgumentParser(description="Remove Python comments/docstrings handling indented snippets.")
     parser.add_argument("--input", type=str, required=True, help="Input JSONL file")
     parser.add_argument("--output", type=str, required=True, help="Output JSONL file")
     

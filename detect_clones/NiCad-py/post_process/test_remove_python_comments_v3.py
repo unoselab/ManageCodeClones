@@ -50,4 +50,4 @@ def test_cleaning_logic(jsonl_path):
 
 if __name__ == "__main__":
     # 파일이 없으면 생성 여부 확인 필요
-    test_cleaning_logic("./data/step1_small.jsonl")
+    test_cleaning_logic("./data/small-input.jsonl")
