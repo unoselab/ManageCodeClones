@@ -30,13 +30,18 @@
 ##     --output ./data/small_output.jsonl \
 ##     > ./data/small.log 2>&1
 
-# python display_clone_group_sizes.py \
-#     --input ./data/step2c_nicad_azure_sim0.7.jsonl 2>&1 \
-#     | tee ./data/display_clone_group_sizes1.log
+python 2d_filter_out_init_fun.py \
+    --input ./data/step2c_nicad_azure_sim0.7.jsonl \
+    --output ./data/step2d_nicad_azure_sim0.7.jsonl \
+    # > ./data/step2d_nicad_azure_sim0.7.log 2>&1
 
-# python 3_gen_init_train_sample.py \
-#     --input ./data/step2c_nicad_azure_sim0.7.jsonl \
-#     --output ./data/step3_nicad_azure_sim0.7.jsonl \
+python display_clone_group_sizes.py \
+    --input ./data/step2d_nicad_azure_sim0.7.jsonl 2>&1 \
+    | tee ./data/display_clone_group_sizes1.log
+
+python 3_gen_init_train_sample.py \
+    --input ./data/step2d_nicad_azure_sim0.7.jsonl \
+    --output ./data/step3_nicad_azure_sim0.7.jsonl \
 
 python 4_gen_neg_clone_sample.py \
   --input ./data/step3_nicad_azure_sim0.7.jsonl \
@@ -46,14 +51,13 @@ python 4_gen_neg_clone_sample.py \
   --out_md ./data/step4_nicad_azure_sim0.7_neg_pairs.md \
   --seed 42 --verify --cleanup
 
-echo ''
-echo '---------------------------------------------------------'
-echo ''
+echo '';echo '**************************************************************'
+echo '**************************************************************';echo ''
 
-# python 5_gen_pos_clone_sample.py \
-#   --input ./data/step3_nicad_azure_sim0.7.jsonl \
-#   --out_txt ./data/step5_nicad_azure_sim0.7_pos_pairs.txt \
-#   --out_jsonl ./data/step5_nicad_azure_sim0.7_pos_pairs.jsonl \
-#   --out_html ./data/step5_display_nicad_azure_sim0.7_pos_pairs.html \
-#   --out_md ./data/step5_display_nicad_azure_sim0.7_pos_pairs.md \
-#   --seed 42 --verify --cleanup
+python 5_gen_pos_clone_sample.py \
+  --input ./data/step3_nicad_azure_sim0.7.jsonl \
+  --out_txt ./data/step5_nicad_azure_sim0.7_pos_pairs.txt \
+  --out_jsonl ./data/step5_nicad_azure_sim0.7_pos_pairs.jsonl \
+  --out_html ./data/step5_display_nicad_azure_sim0.7_pos_pairs.html \
+  --out_md ./data/step5_display_nicad_azure_sim0.7_pos_pairs.md \
+  --seed 42 --verify --cleanup
