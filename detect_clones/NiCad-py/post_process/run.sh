@@ -1,29 +1,29 @@
-# python 1_nicad_xml_to_jsonl.py \
-#     --xml ./input/azure-sdk-for-python_functions-clones-0.30-classes-withsource.xml \
-#     --out ./data/step1_nicad_azure_sim0.7.jsonl \
-#     --mode class \
-#     > ./data/step1_nicad_azure_sim0.7.log 2>&1
+python 1_nicad_xml_to_jsonl.py \
+    --xml ./input/azure-sdk-for-python_functions-clones-0.30-classes-withsource.xml \
+    --out ./data/step1_nicad_azure_sim0.7.jsonl \
+    --mode class \
+    > ./data/step1_nicad_azure_sim0.7.log 2>&1
 
-# python 1_nicad_xml_to_jsonl.py \
-#     --xml ./input-bck/azure-sdk-for-python_functions-clones-0.30-classes-withsource.xml \
-#     --out ./data-bck/step1_nicad_azure_sim0.7.jsonl \
-#     --mode class \
-#     > ./data-bck/step1_nicad_azure_sim0.7.log 2>&1
+python 1_nicad_xml_to_jsonl.py \
+    --xml ./input-bck/azure-sdk-for-python_functions-clones-0.30-classes-withsource.xml \
+    --out ./data-bck/step1_nicad_azure_sim0.7.jsonl \
+    --mode class \
+    > ./data-bck/step1_nicad_azure_sim0.7.log 2>&1
 
-# python 2a_filter_out_test_fun.py \
-#     --input ./data/step1_nicad_azure_sim0.7.jsonl \
-#     --output ./data/step2a_nicad_azure_sim0.7.jsonl 
+python 2a_filter_out_test_fun.py \
+    --input ./data/step1_nicad_azure_sim0.7.jsonl \
+    --output ./data/step2a_nicad_azure_sim0.7.jsonl 
 
-# python 2b_filter_out_group.py \
-#     --input ./data/step2a_nicad_azure_sim0.7.jsonl \
-#     --output ./data/step2b_nicad_azure_sim0.7.jsonl \
-#     --min-size 1 --max-size 20 \
-#     > ./data/step2b_nicad_azure_sim0.7.log 2>&1
+python 2b_filter_out_group.py \
+    --input ./data/step2a_nicad_azure_sim0.7.jsonl \
+    --output ./data/step2b_nicad_azure_sim0.7.jsonl \
+    --min-size 1 --max-size 20 \
+    > ./data/step2b_nicad_azure_sim0.7.log 2>&1
 
-# python 2c_remove_comment.py \
-#     --input ./data/step2b_nicad_azure_sim0.7.jsonl \
-#     --output ./data/step2c_nicad_azure_sim0.7.jsonl \
-#     > ./data/step2c_nicad_azure_sim0.7.log 2>&1
+python 2c_remove_comment.py \
+    --input ./data/step2b_nicad_azure_sim0.7.jsonl \
+    --output ./data/step2c_nicad_azure_sim0.7.jsonl \
+    > ./data/step2c_nicad_azure_sim0.7.log 2>&1
 
 ## python 2c_remove_comment.py \
 ##     --input ./data/small_input.jsonl \
