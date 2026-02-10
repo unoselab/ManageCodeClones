@@ -5,13 +5,18 @@ import time
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import List, Optional
 from collections import Counter
 import io
 import tokenize
+import textwrap
 
-# Assuming this exists in your environment
-from remove_python_comments import remove_python_comments
+# --- Use Tree-sitter based cleaner ---
+try:
+    from remove_python_comments import remove_python_comments
+except ImportError:
+    print("[ERROR] Could not import 'remove_python_comments_ts'.", file=sys.stderr)
+    sys.exit(1)
 
 EXCLUSION_CODE_TEST_FUNC = "TEST_FUNC"
 
@@ -24,39 +29,50 @@ _SKIP_TOKEN_TYPES_FOR_COUNT = {
 }
 
 def nonempty_loc(code: str) -> int:
-    if not code: return 0
+    if not code:
+        return 0
     return sum(1 for line in code.splitlines() if line.strip())
 
 def python_token_count(code: str) -> int:
-    if not code: return 0
+    if not code:
+        return 0
     src = code if code.endswith("\n") else (code + "\n")
     try:
         n = 0
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
-            if tok.type in _SKIP_TOKEN_TYPES_FOR_COUNT: continue
+            if tok.type in _SKIP_TOKEN_TYPES_FOR_COUNT:
+                continue
             n += 1
         return n
     except (tokenize.TokenError, IndentationError, SyntaxError):
         return len(code.split())
 
 def is_test_filename(file_path: str) -> bool:
-    if not file_path: return False
+    if not file_path:
+        return False
     p = file_path.lower()
     name = Path(p).name
-    return "/test/" in p or "/tests/" in p or name.startswith("test_") or name.endswith("_test.py")
+
+    # Updated filter logic - or "testutils" in p
+    if "/test/" in p or "/tests/" in p or "/testing/" in p:
+        return True
+    if "/eng/" in p or p.startswith("eng/"):
+        return True
+    return name.startswith("test_") or name.endswith("_test.py")
 
 def is_test_function_name(code: str) -> bool:
-    # Optimized: Checks def name line-by-line without full tokenization
-    if not code: return False
+    if not code:
+        return False
     for line in code.splitlines():
-        if line.strip().startswith("def test_"): return True
+        if line.strip().startswith("def test_"):
+            return True
     return False
 
 def has_assertions_tokenwise(code: str) -> bool:
-    if not code: return False
-    # Quick check string check before expensive tokenization
-    if "assert" not in code: return False 
-    
+    if not code:
+        return False
+    if "assert" not in code:
+        return False
     src = code if code.endswith("\n") else (code + "\n")
     try:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
@@ -67,10 +83,11 @@ def has_assertions_tokenwise(code: str) -> bool:
         return "assert " in code
 
 def has_test_framework_imports_tokenwise(code: str) -> bool:
-    if not code: return False
-    # Quick string check optimization
+    if not code:
+        return False
     lowered = code.lower()
-    if "pytest" not in lowered and "unittest" not in lowered: return False
+    if "pytest" not in lowered and "unittest" not in lowered:
+        return False
 
     src = code if code.endswith("\n") else (code + "\n")
     try:
@@ -84,20 +101,21 @@ def has_test_framework_imports_tokenwise(code: str) -> bool:
     n = len(toks)
     for i in range(n):
         t = toks[i]
-        if t.type != tokenize.NAME: continue
-        
-        # Check "import X" and "from X"
+        if t.type != tokenize.NAME:
+            continue
         if t.string in ("import", "from"):
             j = i + 1
-            # Skip whitespace/newlines to find the module name
-            while j < n and toks[j].type in (tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT):
+            while j < n and toks[j].type in (
+                tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT
+            ):
                 j += 1
             if j < n and toks[j].type == tokenize.NAME and toks[j].string in ("pytest", "unittest"):
                 return True
     return False
 
 def extract_first_def_name(code: str) -> Optional[str]:
-    if not code: return None
+    if not code:
+        return None
     for line in code.splitlines():
         s = line.strip()
         if s.startswith("def ") and "(" in s:
@@ -106,120 +124,153 @@ def extract_first_def_name(code: str) -> Optional[str]:
             return name or None
     return None
 
-# -----------------------------
-# Decision Logic
-# -----------------------------
 def test_reasons(file_path: str, code_clean: str) -> List[str]:
     reasons: List[str] = []
-    if is_test_filename(file_path): reasons.append("FILENAME")
-    if is_test_function_name(code_clean): reasons.append("FUNCNAME")
-    if has_assertions_tokenwise(code_clean): reasons.append("ASSERT")
-    if has_test_framework_imports_tokenwise(code_clean): reasons.append("IMPORT")
+    if is_test_filename(file_path):
+        reasons.append("FILENAME")
+    if is_test_function_name(code_clean):
+        reasons.append("FUNCNAME")
+    if has_assertions_tokenwise(code_clean):
+        reasons.append("ASSERT")
+    if has_test_framework_imports_tokenwise(code_clean):
+        reasons.append("IMPORT")
     return reasons
 
 # -----------------------------
-# Main Processing (Optimized)
+# Main Processing
 # -----------------------------
 def process_stream(fin, fout, log_exclusions: bool = True):
     total_lines = 0
     remaining_lines = 0
     excluded_lines = 0
 
-    # Lists to hold stats
     loc_all, loc_kept, loc_excluded = [], [], []
     tok_all, tok_kept, tok_excluded = [], [], []
+
     group_sizes_all: List[int] = []
     group_sizes_kept: List[int] = []
     group_sizes_excluded: List[int] = []
-    
+
     for line in fin:
         line = line.strip()
-        if not line: continue
+        if not line:
+            continue
 
         total_lines += 1
         obj = json.loads(line)
         sources = obj.get("sources")
 
-        # Handle non-group objects (legacy or flat format)
         if not isinstance(sources, list):
-            code_raw = obj.get("code", "") or obj.get("func", "")
-            code_clean = remove_python_comments(code_raw)
+            # Legacy/Flat format
+            raw = obj.get("code", "") or obj.get("func", "")
+            code_clean = remove_python_comments(textwrap.dedent(raw))
+
+            # UPDATE THE OBJECT (fix: don't overwrite both if both exist)
+            if "code" in obj:
+                obj["code"] = code_clean
+            elif "func" in obj:
+                obj["func"] = code_clean
+
             loc = nonempty_loc(code_clean)
             tok = python_token_count(code_clean)
-            
-            loc_all.append(loc); loc_kept.append(loc)
-            tok_all.append(tok); tok_kept.append(tok)
-            
+            loc_all.append(loc)
+            loc_kept.append(loc)
+            tok_all.append(tok)
+            tok_kept.append(tok)
+
             fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
             remaining_lines += 1
             continue
 
-        # --- OPTIMIZATION START ---
-        # 1. Pre-process all sources in the group ONCE.
-        # Store tuple: (loc, tok, code_clean, file_path)
+        # --- Process Group ---
         processed_sources = []
         group_locs = []
         group_toks = []
 
+        group_sizes_all.append(len(sources))
+
         for src in sources:
-            code_raw = src.get("code", "") or src.get("func", "")
+            raw = src.get("code", "") or src.get("func", "")
             file_path = src.get("file", "") or src.get("file_path", "")
-            
-            # Heavy operation 1: Regex cleaning
-            code_clean = remove_python_comments(code_raw)
-            
-            # Heavy operation 2 & 3: Tokenization & Counting
+
+            # 1) Dedent & Clean with Tree-sitter
+            dedented_code = textwrap.dedent(raw)
+            code_clean = remove_python_comments(dedented_code)
+
+            # [FIX] UPDATE THE SOURCE OBJECT WITH CLEANED CODE
+            if "code" in src:
+                src["code"] = code_clean
+            elif "func" in src:
+                src["func"] = code_clean
+
             loc = nonempty_loc(code_clean)
             tok = python_token_count(code_clean)
-            
+
             group_locs.append(loc)
             group_toks.append(tok)
-            processed_sources.append({'loc': loc, 'tok': tok, 'code': code_clean, 'file': file_path})
+            processed_sources.append(
+                {"loc": loc, "tok": tok, "code": code_clean, "file": file_path}
+            )
 
-        # Add to global 'All' stats
         loc_all.extend(group_locs)
         tok_all.extend(group_toks)
 
-        # 2. Check for exclusion using the pre-processed data
-        exclude_reason_data = None 
-
+        # Check exclusion (Priority 1: Test Code Checks)
+        exclude_reason_data = None
         for p_src in processed_sources:
-            # Check reasons using already cleaned code
-            reasons = test_reasons(p_src['file'], p_src['code'])
-            
+            reasons = test_reasons(p_src["file"], p_src["code"])
             if reasons:
-                func_name = extract_first_def_name(p_src['code'])
-                exclude_reason_data = (p_src['file'], func_name, reasons, p_src['loc'], p_src['tok'])
-                break # Fail fast: one test source kills the group
+                func_name = extract_first_def_name(p_src["code"])
+                exclude_reason_data = (p_src["file"], func_name, reasons, p_src["loc"], p_src["tok"])
+                break
 
         if exclude_reason_data:
             excluded_lines += 1
+            group_sizes_excluded.append(len(sources))
             loc_excluded.extend(group_locs)
             tok_excluded.extend(group_toks)
 
             if log_exclusions:
                 file_path, func_name, reasons, loc, tok = exclude_reason_data
                 func_display = func_name if func_name else "<unknown>"
-                print(f"[EXCLUDE] code={EXCLUSION_CODE_TEST_FUNC} file={file_path} "
-                      f"func={func_display} loc={loc} tok={tok} why={','.join(reasons)}", file=sys.stderr)
+                print(
+                    f"[EXCLUDE] code={EXCLUSION_CODE_TEST_FUNC} file={file_path} "
+                    f"func={func_display} loc={loc} tok={tok} why={','.join(reasons)}",
+                    file=sys.stderr,
+                )
         else:
             remaining_lines += 1
+            group_sizes_kept.append(len(sources))
             loc_kept.extend(group_locs)
             tok_kept.extend(group_toks)
+            # Now writing the 'obj' which contains the updated 'src["code"]'
             fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
-    return (total_lines, remaining_lines, excluded_lines, 
-            loc_all, loc_kept, loc_excluded, 
-            tok_all, tok_kept, tok_excluded)
+    return (
+        total_lines,
+        remaining_lines,
+        excluded_lines,
+        loc_all,
+        loc_kept,
+        loc_excluded,
+        tok_all,
+        tok_kept,
+        tok_excluded,
+        group_sizes_all,
+        group_sizes_kept,
+        group_sizes_excluded,
+    )
 
 # -----------------------------
-# Reporting Helpers (Unchanged logic)
+# Reporting Helpers
 # -----------------------------
 def _median(sorted_vals: List[int]) -> float:
     n = len(sorted_vals)
-    if n == 0: return 0.0
+    if n == 0:
+        return 0.0
     mid = n // 2
-    if n % 2 == 1: return float(sorted_vals[mid])
+    if n % 2 == 1:
+        return float(sorted_vals[mid])
     return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0
 
 def print_dist_report(label: str, values: List[int], bucket_size: int, topk_exact: int) -> None:
@@ -227,7 +278,6 @@ def print_dist_report(label: str, values: List[int], bucket_size: int, topk_exac
     if not values:
         print("[DIST] (empty)", file=sys.stderr)
         return
-
     vals = sorted(values)
     n = len(vals)
     print(f"[DIST] count    : {n}", file=sys.stderr)
@@ -237,19 +287,20 @@ def print_dist_report(label: str, values: List[int], bucket_size: int, topk_exac
 
     buckets = Counter()
     for v in vals:
-        if v <= 0: key = "0"
+        if v <= 0:
+            key = "0"
         else:
             start = ((v - 1) // bucket_size) * bucket_size + 1
             key = f"{start:>4}-{start + bucket_size - 1:<4}"
         buckets[key] += 1
 
     print(f"[DIST] bucket_size: {bucket_size}", file=sys.stderr)
-    if "0" in buckets: print(f"[DIST]     0      : {buckets['0']}", file=sys.stderr)
-    
-    # Sort buckets numerically based on start range
+    if "0" in buckets:
+        print(f"[DIST]     0      : {buckets['0']}", file=sys.stderr)
+
     def _range_start(k: str) -> int:
         return int(k.split("-")[0]) if "-" in k else -1
-        
+
     for k in sorted([k for k in buckets if k != "0"], key=_range_start):
         print(f"[DIST] {k} : {buckets[k]}", file=sys.stderr)
 
@@ -258,22 +309,20 @@ def print_dist_report(label: str, values: List[int], bucket_size: int, topk_exac
         for v, cnt in Counter(vals).most_common(topk_exact):
             print(f"[DIST]   {v}: {cnt}", file=sys.stderr)
 
-
 def print_group_size_dist(label: str, sizes: List[int]) -> None:
     print(f"[GROUP] ===== {label} =====", file=sys.stderr)
     if not sizes:
         print("[GROUP] (empty)", file=sys.stderr)
         return
-
     cnt = Counter(sizes)
     total = sum(cnt.values())
-
     print(f"[GROUP] total groups: {total}", file=sys.stderr)
-    print(f"[GROUP] min/max size: {min(cnt)} / {max(cnt)}", file=sys.stderr)
-
+    try:
+        print(f"[GROUP] min/max size: {min(cnt)} / {max(cnt)}", file=sys.stderr)
+    except ValueError:
+        pass
     for k in sorted(cnt):
-        print(f"[GROUP] size={k:>3} : {cnt[k]}", file=sys.stderr)
-
+        print(f"[GROUP] size={k:<3} : {cnt[k]}", file=sys.stderr)
 
 # -----------------------------
 # Main
@@ -293,9 +342,20 @@ def main():
     print(f"[TIME] start: {datetime.now().isoformat(sep=' ', timespec='seconds')}", file=sys.stderr)
 
     with open(args.input, "r", encoding="utf-8") as fin, open(args.output, "w", encoding="utf-8") as fout:
-        (total, remaining, excluded,
-         loc_all, loc_kept, loc_excluded,
-         tok_all, tok_kept, tok_excluded) = process_stream(fin, fout, log_exclusions=not args.quiet_exclusions)
+        (
+            total,
+            remaining,
+            excluded,
+            loc_all,
+            loc_kept,
+            loc_excluded,
+            tok_all,
+            tok_kept,
+            tok_excluded,
+            group_sizes_all,
+            group_sizes_kept,
+            group_sizes_excluded,
+        ) = process_stream(fin, fout, log_exclusions=not args.quiet_exclusions)
 
     elapsed = time.time() - start_time
     print(f"[STATS] total lines : {total}", file=sys.stderr)
