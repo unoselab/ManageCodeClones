@@ -61,3 +61,12 @@ python 5_gen_pos_clone_sample.py \
   --out_html ./data/step5_display_nicad_azure_sim0.7_pos_pairs.html \
   --out_md ./data/step5_display_nicad_azure_sim0.7_pos_pairs.md \
   --seed 42 --verify --cleanup
+
+echo '';echo '**************************************************************'
+echo '**************************************************************';echo ''
+
+python 8_split_combine_neg_pos_pairs.py \
+  --neg ../data/java/step4_nicad_azure_sim0.7_neg_pairs.txt \
+  --pos ../data/java/step5_nicad_azure_sim0.7_pos_pairs.txt \
+  --out_dir ../data/java/azure \
+  --seed 42 
