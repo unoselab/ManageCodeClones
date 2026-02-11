@@ -4,7 +4,7 @@
 #    - Outputs (expected):
 #        ../dataset/train_10percent.txt
 #        ../dataset/valid_10percent.txt
-python 1_sample_data.py --seed 3 --mode balanced
+# python 1_sample_data.py --seed 3 --mode balanced
 
 # 2) Build a mixed dataset: BCB(10%) + Other Domain (e.g., Camel)
 #    - Merges clone-pair files (id1, id2, label) from:
@@ -39,16 +39,41 @@ python 1_sample_data.py --seed 3 --mode balanced
 #        * ../dataset/valid_mix.txt
 #        * ../dataset/test_<otherdomain>.txt   (optional, other-domain only)
 #        * ../dataset/mix/data.jsonl
-python 2_mix_data.py \
-  --otherdomain_name camel \
+DATA_DIR="$HOME/nicad-clone-azure"
+
+# Using 'python3' to be safe, and standardizing on spaces for args
+python3 2_mix_data.py \
+  --otherdomain_name azure \
   --train_data_file_bcb ../dataset/train_10percent.txt \
   --valid_data_file_bcb ../dataset/valid_10percent.txt \
-  --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
-  --valid_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/valid.txt \
-  --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt \
+  --train_data_file_more "${DATA_DIR}/train.txt" \
+  --valid_data_file_more "${DATA_DIR}/valid.txt" \
+  --test_data_file_otherdomain "${DATA_DIR}/test.txt" \
   --bcb_jsonl ../dataset/data.jsonl \
-  --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
+  --more_jsonl "${DATA_DIR}/data.jsonl" \
+  --out_dir ../dataset/mix_azure \
+  --out_train_mix ../dataset/train_mix_azure.txt \
+  --out_valid_mix ../dataset/valid_mix_azure.txt \
   --seed 3
 
+# Verify the azure mix output
+python3 3_verify_data.py \
+  --mapping_jsonl ../dataset/mix_azure/data.jsonl \
+  --train_pairs ../dataset/train_mix_azure.txt \
+  --valid_pairs ../dataset/valid_mix_azure.txt \
+  --test_pairs ../dataset/test_azure.txt
 
-python 3_verify_data.py --strict --otherdomain_name camel
+# ################################################################3
+
+# python 2_mix_data.py \
+#   --otherdomain_name camel \
+#   --train_data_file_bcb ../dataset/train_10percent.txt \
+#   --valid_data_file_bcb ../dataset/valid_10percent.txt \
+#   --train_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/train.txt \
+#   --valid_data_file_more ../../../detect_clones/NiCad/post_process/data/java/camel/valid.txt \
+#   --test_data_file_otherdomain ../../../detect_clones/NiCad/post_process/data/java/camel/test.txt \
+#   --bcb_jsonl ../dataset/data.jsonl \
+#   --more_jsonl ../../../detect_clones/NiCad/post_process/data/java/camel/data.jsonl \
+#   --seed 3
+
+# python 3_verify_data.py --strict --otherdomain_name azure
