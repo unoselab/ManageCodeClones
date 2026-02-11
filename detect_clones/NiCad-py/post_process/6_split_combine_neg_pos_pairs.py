@@ -31,6 +31,20 @@ def write_lines(path: Path, lines: List[str]) -> None:
 
 
 def split_50_25_25(lines: List[str], rng: random.Random) -> Tuple[List[str], List[str], List[str]]:
+    """
+    Splits a list of lines into Train (50%), Validation (25%), and Test (25%) sets.
+    
+    The function shuffles the input list in-place using the provided random generator
+    to ensure reproducibility. It then calculates split indices using integer division.
+    
+    Args:
+        lines (List[str]): A list of strings (samples) to be split.
+        rng (random.Random): A seeded random number generator instance.
+        
+    Returns:
+        Tuple[List[str], List[str], List[str]]: A tuple containing three lists:
+            (train_lines, valid_lines, test_lines).
+    """
     rng.shuffle(lines)
     n = len(lines)
 
@@ -75,10 +89,10 @@ def main():
     write_lines(args.out_dir / "valid.txt", valid)
     write_lines(args.out_dir / "test.txt", test)
 
-    print("✅ Done")
+    print("** Done")
     print(f"Neg: {len(neg_lines)} → train={len(neg_train)}, valid={len(neg_valid)}, test={len(neg_test)}")
     print(f"Pos: {len(pos_lines)} → train={len(pos_train)}, valid={len(pos_valid)}, test={len(pos_test)}")
-    print(f"Combined saved to: {args.out_dir}")
+    print(f"** Combined saved to: {args.out_dir}")
 
 
 if __name__ == "__main__":
