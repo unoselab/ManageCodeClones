@@ -149,6 +149,11 @@ class TextDataset(Dataset):
         # NOTE: 10% sampling is handled externally (train_10percent.txt / valid_10percent.txt)
         # if 'test' not in postfix:
         #     data=random.sample(data,int(len(data)*0.1))
+        ratio = getattr(args, "subsample_ratio", 1.0)
+        if ratio < 1.0 and 'test' not in postfix:
+            k = max(1, int(len(data) * ratio))
+            data = random.sample(data, k)
+
         logger.info(f"[Dataset] postfix={postfix} pairs_loaded={len(data)}")
 
         self.examples=pool.map(get_example,tqdm(data,total=len(data)))
@@ -425,7 +430,10 @@ def test(args, model, tokenizer, prefix="",pool=None,best_threshold=0):
     logits=np.concatenate(logits,0)
     y_trues=np.concatenate(y_trues,0)
     y_preds=logits[:,1]>best_threshold
-    with open(os.path.join(args.output_dir,"predictions.txt"),'w') as f:
+    # Add for future mutiple repos by Dream 02/07/206
+    pred_path = os.path.join(args.output_dir, args.predictions_file)
+    with open(pred_path, "w", encoding="utf-8") as f:
+    #with open(os.path.join(args.output_dir,"predictions.txt"),'w') as f:
         for example,pred in zip(eval_dataset.examples,y_preds):
             if pred:
                 f.write(example.url1+'\t'+example.url2+'\t'+'1'+'\n')
@@ -545,8 +553,16 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
+    # Add by Dream on 02/06/2026
+    parser.add_argument(
+    "--predictions_file",
+    default="predictions.txt",
+    help="Filename for prediction output (written under --output_dir)")
 
-    
+    #Add on 2/08/2026. the dataset train.txt and valid.txt already 0.1 of org train.txt.
+    parser.add_argument("--subsample_ratio", type=float, default=1.0,
+                        help="Use <1.0 to subsample train/valid. 1.0 means full data.")
+
     pool = multiprocessing.Pool(cpu_cont)
     args = parser.parse_args()
 

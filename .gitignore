@@ -8,6 +8,7 @@ __pycache__/
 *.log
 log*.txt
 runs/
+*.out
 
 # --- Heavy Model Checkpoints ---
 # We ignore these to prevent the repo from becoming huge (GBs of data)
@@ -31,4 +32,3 @@ bck/
 .idea/
 .classpath
 .project
-/Examples/
