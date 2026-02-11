@@ -4,7 +4,7 @@
 #    - Outputs (expected):
 #        ../dataset/train_10percent.txt
 #        ../dataset/valid_10percent.txt
-# python 1_sample_data.py --seed 3 --mode balanced
+python 1_sample_data.py --seed 3 --mode balanced
 
 # 2) Build a mixed dataset: BCB(10%) + Other Domain (e.g., Camel)
 #    - Merges clone-pair files (id1, id2, label) from:
@@ -37,7 +37,7 @@
 #    - Outputs (expected):
 #        * ../dataset/train_mix.txt
 #        * ../dataset/valid_mix.txt
-#        * ../dataset/test_<otherdomain>.txt   (optional, other-domain only)
+#        * ../dataset/test_<otherdomain>.txt
 #        * ../dataset/mix/data.jsonl
 DATA_DIR="$HOME/nicad-clone-azure"
 
