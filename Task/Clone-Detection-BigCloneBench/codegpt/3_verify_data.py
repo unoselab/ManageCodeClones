@@ -4,50 +4,55 @@
 
 Verify that every (id1, id2) in pair files exists in the mapping jsonl keys.
 
-Defaults:
-  mapping: ../dataset/mix/data.jsonl
-  train  : ../dataset/train_mix.txt
-  valid  : ../dataset/valid_mix.txt
-  test   : ../dataset/test_<otherdomain>.txt  (requires --otherdomain_name)
-
-Pair format (whitespace-separated, typically TSV):
-  <id1> <id2> <label>
-
-JSONL format:
-  each line is a JSON object with key "idx" (string)
+Usage Example:
+  python3 3_verify_data.py \
+    --mapping_jsonl ../dataset/mix_azure/data.jsonl \
+    --train_pairs ../dataset/train_mix_azure.txt \
+    --valid_pairs ../dataset/valid_mix_azure.txt \
+    --test_pairs ../dataset/test.txt
 
 Exit code:
-  - 0 if pass
+  - 0 if pass (or non-strict fail)
   - 1 if --strict and any missing found
+  - 2 if input files not found
 """
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 
 def load_keys(jsonl_path: Path, key_field: str = "idx") -> set:
     keys = set()
     bad = 0
     total = 0
-    with jsonl_path.open("r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            total += 1
-            try:
-                js = json.loads(line)
-            except Exception:
-                bad += 1
-                continue
-            if key_field in js:
-                keys.add(str(js[key_field]))
-            else:
-                bad += 1
-    print(f"[MAP] {jsonl_path} -> keys={len(keys)} lines={total} bad_or_missing_field={bad}")
+    
+    print(f"[LOAD] Loading keys from: {jsonl_path}")
+    
+    try:
+        with jsonl_path.open("r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                total += 1
+                try:
+                    js = json.loads(line)
+                except Exception:
+                    bad += 1
+                    continue
+                
+                if key_field in js:
+                    keys.add(str(js[key_field]))
+                else:
+                    bad += 1
+    except FileNotFoundError:
+        print(f"[ERR] JSONL file not found: {jsonl_path}", file=sys.stderr)
+        sys.exit(2)
+
+    print(f"       -> Found {len(keys)} unique keys (lines={total}, bad/missing_key={bad})")
     return keys
 
 
@@ -67,12 +72,15 @@ def verify_pairs(pair_path: Path, keys: set, max_examples: int = 10) -> Dict:
             if not line:
                 continue
             parts = line.split()
-            if len(parts) != 3:
+            
+            # Expecting: id1 id2 label (at least 3 columns)
+            if len(parts) < 3:
                 bad_format += 1
                 continue
 
             parsed += 1
-            a, b, y = parts
+            a, b, y = parts[0], parts[1], parts[2]
+            
             in_a = a in keys
             in_b = b in keys
 
@@ -119,58 +127,73 @@ def print_report(rep: Dict):
 
 def main():
     ap = argparse.ArgumentParser(description="Verify pair files against mix/data.jsonl mapping keys.")
-    ap.add_argument("--mapping_jsonl", type=str, default="../dataset/mix/data.jsonl",
-                    help="Path to mapping JSONL (default: ../dataset/mix/data.jsonl)")
+    
+    # Mapping file
+    ap.add_argument("--mapping_jsonl", type=str, required=True,
+                    help="Path to mapping JSONL file (e.g., ../dataset/mix_azure/data.jsonl)")
+    
     ap.add_argument("--key_field", type=str, default="idx",
                     help="Key field in JSONL objects (default: idx)")
 
-    ap.add_argument("--train_pairs", type=str, default="../dataset/train_mix.txt",
-                    help="Train pairs file (default: ../dataset/train_mix.txt)")
-    ap.add_argument("--valid_pairs", type=str, default="../dataset/valid_mix.txt",
-                    help="Valid pairs file (default: ../dataset/valid_mix.txt)")
-
-    # New: otherdomain_name determines default test file name
-    ap.add_argument("--otherdomain_name", type=str, default=None,
-                    help="Other domain name used to infer default test file (../dataset/test_<name>.txt). Example: camel")
-
-    # test_pairs can override the inferred default
+    # Pair files
+    ap.add_argument("--train_pairs", type=str, required=True,
+                    help="Train pairs file (e.g., ../dataset/train_mix_azure.txt)")
+    
+    ap.add_argument("--valid_pairs", type=str, default=None,
+                    help="Valid pairs file (optional)")
+    
     ap.add_argument("--test_pairs", type=str, default=None,
-                    help="Test pairs file. If not set, uses ../dataset/test_<otherdomain_name>.txt")
+                    help="Test pairs file (optional)")
+
+    # Legacy support / Helper for default file naming
+    ap.add_argument("--otherdomain_name", type=str, default=None,
+                    help="If provided and --test_pairs is missing, infers test file as ../dataset/test_<name>.txt")
 
     ap.add_argument("--max_examples", type=int, default=10,
                     help="Max number of missing examples to print per file (default: 10)")
+    
     ap.add_argument("--strict", action="store_true",
                     help="Exit with code 1 if any missing pairs are found.")
 
     args = ap.parse_args()
 
+    # 1. Resolve Mapping Path
     mapping_path = Path(args.mapping_jsonl)
     if not mapping_path.exists():
         print(f"[ERR] mapping_jsonl not found: {mapping_path}", file=sys.stderr)
         sys.exit(2)
 
+    # 2. Resolve Pair Files
+    pair_files = []
+
+    # Train (Required)
+    pair_files.append(("train", Path(args.train_pairs)))
+
+    # Valid (Optional but recommended)
+    if args.valid_pairs:
+        pair_files.append(("valid", Path(args.valid_pairs)))
+
+    # Test (Flexible logic)
     test_path = None
     if args.test_pairs:
         test_path = Path(args.test_pairs)
-    else:
-        if not args.otherdomain_name:
-            print("[ERR] Provide --otherdomain_name (to infer ../dataset/test_<name>.txt) or set --test_pairs explicitly.",
-                  file=sys.stderr)
-            sys.exit(2)
+    elif args.otherdomain_name:
+        # Legacy fallback logic: assume it is in ../dataset/
         test_path = Path("../dataset") / f"test_{args.otherdomain_name}.txt"
+    
+    if test_path:
+        pair_files.append(("test", test_path))
 
-    pair_files = [
-        ("train", Path(args.train_pairs)),
-        ("valid", Path(args.valid_pairs)),
-        ("test",  test_path),
-    ]
+    # 3. Check existence of all pair files before processing
     for name, p in pair_files:
         if not p.exists():
             print(f"[ERR] {name} pair file not found: {p}", file=sys.stderr)
             sys.exit(2)
 
+    # 4. Load Keys
     keys = load_keys(mapping_path, key_field=args.key_field)
 
+    # 5. Verify Files
     overall_missing = 0
     for _, pf in pair_files:
         rep = verify_pairs(pf, keys, max_examples=args.max_examples)
