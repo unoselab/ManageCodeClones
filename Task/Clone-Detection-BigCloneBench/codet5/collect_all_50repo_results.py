@@ -2,8 +2,8 @@ import re
 from pathlib import Path
 import csv
 
-LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codet5/saved_models_combined/test_all_systems_codet5_combined.log"
-OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codet5/saved_models_combined/repo_metrics_codeT5_combined.csv"
+LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codet5/saved_models_combined_py/python/test_all_systems_codet5_bcb_python_combined.log"
+OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codet5/saved_models_combined_py/python/repo_metrics_codeT5_bcb_python.csv"
 
 # Repo header from bash loop:
 # -------------------- [activemq] Sun Feb  8 01:23:38 PM CST 2026 --------------------

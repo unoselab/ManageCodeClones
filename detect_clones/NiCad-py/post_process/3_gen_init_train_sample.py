@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-4_gen_init_train_sample.py
+3_gen_init_train_sample.py
 
 Purpose
 -------
@@ -25,12 +25,31 @@ import json
 import os
 import sys
 
+def infer_repo(src_file: str) -> str:
+    """
+    Extract repo name from:
+      systems/<repo>/...
+    Example:
+      systems/azure-sdk-for-python/... -> azure-sdk-for-python
+    """
+    if not src_file:
+        return "unknown"
+
+    path = src_file.replace("\\", "/")
+
+    parts = path.split("/")
+    try:
+        idx = parts.index("systems")
+        return parts[idx + 1]
+    except (ValueError, IndexError):
+        return "unknown"
+
 def add_unique_ids(input_file: str, output_file: str) -> None:
     if not os.path.exists(input_file):
         print(f"[ERROR] Input file not found: {input_file}")
         sys.exit(1)
 
-    print(f"--- Step 4: Assigning stable func_ids ---")
+    print(f"--- Step 3: Assigning stable func_ids ---")
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
@@ -51,9 +70,9 @@ def add_unique_ids(input_file: str, output_file: str) -> None:
                 sources = data.get("sources", [])
 
                 # Generate IDs using local index (i) for reproducibility
-                # Format: {class_id}_{local_index}
-                for i, src in enumerate(sources):
-                    src["func_id"] = f"{class_id}_{i}"
+                for src in sources:
+                    repo = infer_repo(src.get("file", ""))
+                    src["func_id"] = f"{repo}_{class_id}_{total_funcs}"
                     total_funcs += 1
 
                 fout.write(json.dumps(data, ensure_ascii=False) + "\n")

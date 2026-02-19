@@ -4,8 +4,8 @@ shopt -s nullglob
 
 SIM_TAG="${1:-sim0.7}"
 
-OUTPUT_ROOT="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad/post_process/data/java"
-TARGET_ROOT="/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/dataset/java"
+OUTPUT_ROOT="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad-py/post_process/data"
+TARGET_ROOT="/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/dataset/python"
 
 mkdir -p "$TARGET_ROOT"
 

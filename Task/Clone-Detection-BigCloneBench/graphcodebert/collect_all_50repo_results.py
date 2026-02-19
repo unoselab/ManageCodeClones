@@ -2,12 +2,12 @@ import re
 from pathlib import Path
 import csv
 
-LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/graphcodebert/saved_models_combined/logs/test_all_systems_graphcodebert_combined.log"  
-OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/graphcodebert/saved_models_combined/repo_metrics_graphcodebert_combined.csv"
+LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/graphcodebert/saved_models_combined_py/logs/test_all_systems_graphcodebert_bcb_python_combined.log"  
+OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/graphcodebert/saved_models_combined_py/repo_metrics_graphcodebert_bcb_python_combined.csv"
 
 # Extract repo from:
 # train: ../dataset/ant-ivy/train.txt
-RE_TRAIN = re.compile(r"train:\s+.*?/dataset/([^/]+)/train\.txt")
+RE_TRAIN = re.compile(r"train:\s+.*?/dataset/python/([^/]+)/train\.txt")
 
 RE_METRIC = re.compile(
     r"(precision|recall|f1)\s*[:=]\s*([0-9]*\.?[0-9]+)",

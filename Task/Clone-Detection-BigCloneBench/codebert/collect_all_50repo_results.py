@@ -3,12 +3,12 @@ from pathlib import Path
 import csv
 
 # LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_bcb/logs/test_all_systems.log" 
-LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_combined/logs/test_all_systems_combined.log" 
-OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_combined/repo_metrics_codebert_combined.csv"
+LOG_PATH = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_combined_py/logs/test_all_systems_bcb_python_cominbed.log" 
+OUT_CSV  = "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_combined_py/repo_metrics_codebert_bcb_python_combined.csv"
 
 # Extract repo from:
 # train: ../dataset/ant-ivy/train.txt
-RE_TRAIN = re.compile(r"train:\s+.*?/dataset/([^/]+)/train\.txt")
+RE_TRAIN = re.compile(r"train:\s+.*?/dataset/python/([^/]+)/train\.txt")
 
 RE_METRIC = re.compile(
     r"(precision|recall|f1)\s*[:=]\s*([0-9]*\.?[0-9]+)",

@@ -31,6 +31,7 @@ detect_clones/NiCad-py/post_process/input-bck/
 detect_clones/NiCad-py/post_process/data/
 detect_clones/NiCad-py/post_process/data-bck/
 detect_clones/NiCad-py/post_process/data/*.log
+systems/
 
 # --- IDE Settings ---
 .vscode/
