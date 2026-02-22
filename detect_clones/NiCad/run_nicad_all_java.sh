@@ -35,7 +35,7 @@ for dataset_path in "${datasets[@]}"; do
 
     START_TIME=$(date +%s)
 
-    ./nicad6 functions java "$dataset_path" default-report \
+    ./nicad6 blocks java "$dataset_path" default-report \
       > "$LOG_DIR/${d}_nicad.log" 2>&1
 
     END_TIME=$(date +%s)

@@ -127,6 +127,19 @@ class TextDataset(Dataset):
         self.examples = []
         index_filename=file_path
         logger.info("Creating features from index file at %s ", index_filename)
+        # Add debug information to check right data.json files. by Dream 02/06/2026
+        # resolve data.jsonl path (matches original behavior)
+        data_jsonl_path = (
+            '/'.join(index_filename.split('/')[:-1])
+            + '/{}/data.jsonl'.format(args.test_type)
+        )
+
+        # clean up double slashes when test_type == ""
+        data_jsonl_path = data_jsonl_path.replace('//', '/')
+
+        # 🔍 PRINT IT (only really matters for test, but safe for all)
+        logger.info("Loading data.jsonl from: %s", data_jsonl_path)
+        
         url_to_code={}
         with open('/'.join(index_filename.split('/')[:-1])+'/{}/data.jsonl'.format(args.test_type)) as f:
             for line in f:
@@ -148,8 +161,12 @@ class TextDataset(Dataset):
                 else:
                     label=1
                 data.append((url1,url2,label,tokenizer, args,cache,url_to_code))
-        if 'test' not in postfix:
-            data=random.sample(data,int(len(data)*0.1))
+        # if 'test' not in postfix:
+        #     data=random.sample(data,int(len(data)*0.1))
+        ratio = getattr(args, "subsample_ratio", 1.0)
+        if ratio < 1.0 and 'test' not in postfix:
+            k = max(1, int(len(data) * ratio))
+            data = random.sample(data, k)
 
         self.examples=pool.map(get_example,tqdm(data,total=len(data)))
         if 'train' in postfix:
@@ -426,7 +443,11 @@ def test(args, model, tokenizer, prefix="",pool=None,best_threshold=0):
     logits=np.concatenate(logits,0)
     y_trues=np.concatenate(y_trues,0)
     y_preds=logits[:,1]>best_threshold
-    with open(os.path.join(args.output_dir,"predictions.txt"),'w') as f:
+
+    # Add for future mutiple repos by Dream 02/05/206
+    pred_path = os.path.join(args.output_dir, args.predictions_file)
+    with open(pred_path, "w", encoding="utf-8") as f:
+    #with open(os.path.join(args.output_dir,"predictions.txt"),'w') as f:
         for example,pred in zip(eval_dataset.examples,y_preds):
             if pred:
                 f.write(example.url1+'\t'+example.url2+'\t'+'1'+'\n')
@@ -547,8 +568,16 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
+    # Add by Dream on 02/06/2026
+    parser.add_argument(
+    "--predictions_file",
+    default="predictions.txt",
+    help="Filename for prediction output (written under --output_dir)")
 
-    
+    #Add on 2/08/2026. the dataset train.txt and valid.txt already 0.1 of org train.txt.
+    parser.add_argument("--subsample_ratio", type=float, default=1.0,
+                        help="Use <1.0 to subsample train/valid. 1.0 means full data.")
+
     pool = multiprocessing.Pool(cpu_cont)
     args = parser.parse_args()
 

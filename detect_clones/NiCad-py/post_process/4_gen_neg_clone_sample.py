@@ -128,6 +128,12 @@ def generate_markdown_report(pairs: List[Dict[str, Any]], output_file: str) -> N
         f.write("\n".join(md_lines))
     print(f"Markdown report generated: {output_file}")
 
+def extract_clone_group(fid: str) -> str:
+    # Expected format: repo_classid_counter (e.g., activemq_125_228)
+    parts = fid.split("_")
+    if len(parts) < 3:
+        return "unknown"
+    return parts[1]   # classid
 
 def verify_negative_samples(txt_path: str) -> bool:
     """Verifies that generated negative samples truly belong to different clone groups."""
@@ -166,9 +172,11 @@ def verify_negative_samples(txt_path: str) -> bool:
                 print(f"[Line {line_num}] ID Format Error: IDs must contain '_'. Got ({id1}, {id2})")
                 errors += 1
                 continue
-
-            group1 = id1.split("_", 1)[0]
-            group2 = id2.split("_", 1)[0]
+            # Handle the updated format: activemq_125_228, activemq_60_51
+            group1 = extract_clone_group(id1)
+            group2 = extract_clone_group(id2)
+            # group1 = id1.split("_", 1)[0]
+            # group2 = id2.split("_", 1)[0]
 
             if group1 == group2:
                 print(

@@ -27,7 +27,12 @@ import argparse
 import json
 import os
 import sys
+import re
 
+def infer_repo(src_file: str) -> str:
+    # Example path: systems/activemq-java/...  -> activemq
+    m = re.search(r"^systems/([^/]+?)-java/", (src_file or "").replace("\\", "/"))
+    return m.group(1) if m else "unknown"
 
 def add_unique_ids(input_file: str, output_file: str) -> None:
     if not os.path.exists(input_file):
@@ -61,7 +66,9 @@ def add_unique_ids(input_file: str, output_file: str) -> None:
             sources = data.get("sources", [])
 
             for src in sources:
-                src["func_id"] = f"{class_id}_{global_func_counter}"
+                repo = infer_repo(src.get("file", ""))
+                src["func_id"] = f"{repo}_{class_id}_{global_func_counter}"
+                #src["func_id"] = f"{class_id}_{global_func_counter}"
                 global_func_counter += 1
 
             fout.write(json.dumps(data, ensure_ascii=False) + "\n")

@@ -8,6 +8,7 @@ __pycache__/
 *.log
 log*.txt
 runs/
+*.out
 
 # --- Heavy Model Checkpoints ---
 # We ignore these to prevent the repo from becoming huge (GBs of data)
@@ -30,10 +31,14 @@ detect_clones/NiCad-py/post_process/input-bck/
 detect_clones/NiCad-py/post_process/data/
 detect_clones/NiCad-py/post_process/data-bck/
 detect_clones/NiCad-py/post_process/data/*.log
+systems/
+detect_clones/NiCad/post_process/data/java-blocks
+detect_clones/NiCad/post_process/input-blocks
 
 # --- IDE Settings ---
 .vscode/
 .idea/
 .classpath
 .project
-/Examples/
+
+
