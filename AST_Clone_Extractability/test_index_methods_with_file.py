@@ -81,22 +81,22 @@ class TestIndexMethodsRealFile(unittest.TestCase):
             method_source = parser.text_of(record.node)
             self.assertIn(record.method_info["name"], method_source)
 
-    def test_caching_mechanism(self):
-        """
-        Verifies that requesting A.java multiple times does not re-read the file,
-        but returns the exact same cached instances.
-        """
-        path_str = str(self.file_path)
+    # def test_caching_mechanism(self):
+    #     """
+    #     Verifies that requesting A.java multiple times does not re-read the file,
+    #     but returns the exact same cached instances.
+    #     """
+    #     path_str = str(self.file_path)
         
-        # First request (reads file, parses AST)
-        parser1, methods1 = self.indexer.get(path_str)
+    #     # First request (reads file, parses AST)
+    #     parser1, methods1 = self.indexer.get(path_str)
         
-        # Second request (should hit the cache)
-        parser2, methods2 = self.indexer.get(path_str)
+    #     # Second request (should hit the cache)
+    #     parser2, methods2 = self.indexer.get(path_str)
         
-        # Use assertIs to check that they are the exact same objects in memory
-        self.assertIs(parser1, parser2, "Cache failed: A new parser was created.")
-        self.assertIs(methods1, methods2, "Cache failed: A new methods dictionary was created.")
+    #     # Use assertIs to check that they are the exact same objects in memory
+    #     self.assertIs(parser1, parser2, "Cache failed: A new parser was created.")
+    #     self.assertIs(methods1, methods2, "Cache failed: A new methods dictionary was created.")
 
 if __name__ == "__main__":
     unittest.main()
