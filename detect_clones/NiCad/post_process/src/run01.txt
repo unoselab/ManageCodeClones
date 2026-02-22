@@ -1,12 +1,12 @@
-SRC_BASE="/home/user1-system11/research_dream/clone_research/clone_detectors/NiCad/systems"
-DST="/home/user1-system11/research_dream/clone_research/postprocess-clone-results/java/Nicad/input"
+SRC_BASE="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad/systems"
+DST="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad/post_process/input-block"
 
 mkdir -p "$DST"
 
 find "$SRC_BASE" \
   -type f \
-  -path "*_functions-blind-clones/*-classes-withsource.xml" \
-  -exec cp -v {} "$DST" \;
+  -path "*_blocks-blind-clones/*-classes-withsource.xml" \
+  -exec cp -v -t "$DST" {} +
 
 
 python 1_nicad_xml_to_jsonl.py \
