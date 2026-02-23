@@ -249,11 +249,10 @@ def extract_rw_by_region(
     Compute variable read/write sets (V_r, V_w) for pre/within/post clone regions.
     """
     params = set(collect_params(parser, method_node))
-    
-    # FIX: Use our tuple-based function, then extract just the variable names into a Set
     raw_locals = collect_local_vars(parser, method_node)
-    locals_ = {var_name for var_type, var_name, line_num in raw_locals}
     
+    # Extract just the names to build our scope set
+    locals_ = {var_name for var_type, var_name, line_num in raw_locals}
     scope_vars = params | locals_
 
     vr = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
@@ -261,7 +260,6 @@ def extract_rw_by_region(
     
     locally_defined_within: Set[str] = set()
 
-    # iter_descendants must yield nodes in document order
     for n in iter_descendants(method_node):
         if n.type != "identifier":
             continue
@@ -273,17 +271,20 @@ def extract_rw_by_region(
         line = n.start_point[0] + 1
         region = _region_for_line(line, clone_start, clone_end)
         is_r, is_w = classify_identifier_rw(n)
+        
+        # Format the variable name to include its exact line number
+        var_with_line = f"{name} (Line {line})"
 
         if region == REG_WITHIN:
             if is_r and name not in locally_defined_within:
-                vr[region].add(name)
+                vr[region].add(var_with_line)
             
             if is_w:
-                vw[region].add(name)
-                locally_defined_within.add(name)
+                vw[region].add(var_with_line)
+                locally_defined_within.add(name) # Keep tracking just the name for logic!
         else:
-            if is_r: vr[region].add(name)
-            if is_w: vw[region].add(name)
+            if is_r: vr[region].add(var_with_line)
+            if is_w: vw[region].add(var_with_line)
 
     return RWRegions(
         locals_in_method=locals_,

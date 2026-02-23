@@ -120,7 +120,36 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                     clone_locals.append(formatted_var)
                                 else:
                                     post_locals.append(formatted_var)
+
+
+
                                     
+
+                            # # --- Run Data-Flow Analysis ---
+                            # rw_regions = extract_rw_by_region(
+                            #     parser, 
+                            #     enclosing_record.node, 
+                            #     clone_start, 
+                            #     clone_end, 
+                            #     only_method_scope=True
+                            # )
+                            
+                            # # Add instance metadata using the template
+                            # html_content.append(tmpl_instance_meta.format(
+                            #     func_id=func_id,
+                            #     rel_file=rel_file,
+                            #     range_str=range_str,
+                            #     method_qualified=m_info.get("qualified"),
+                            #     m_start=m_start,
+                            #     m_end=m_end,
+                            #     vr_pre=fmt_set(rw_regions.vr[REG_PRE]),
+                            #     vr_within=fmt_set(rw_regions.vr[REG_WITHIN]),
+                            #     vr_post=fmt_set(rw_regions.vr[REG_POST]),
+                            #     vw_pre=fmt_set(rw_regions.vw[REG_PRE]),
+                            #     vw_within=fmt_set(rw_regions.vw[REG_WITHIN]),
+                            #     vw_post=fmt_set(rw_regions.vw[REG_POST])
+                            # ))
+
 
                             # --- Run Data-Flow Analysis ---
                             rw_regions = extract_rw_by_region(
@@ -131,6 +160,36 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 only_method_scope=True
                             )
                             
+                            # --- 1. Build a Type Lookup Dictionary ---
+                            type_map = {}
+                            
+                            # Parse original method parameters (e.g., "String name" -> {"name": "String"})
+                            for param_str in m_info.get("parameters", []):
+                                parts = param_str.strip().rsplit(" ", 1)
+                                if len(parts) == 2:
+                                    type_map[parts[1]] = parts[0]
+                                    
+                            # Parse local variables
+                            for var_type, var_name, _ in m_info.get("local_variables", []):
+                                type_map[var_name] = var_type
+
+                            # --- 2. Synthesize the Extracted Parameters ---
+                            # The required parameters are the Variables Read WITHIN the clone.
+                            extracted_param_list = []
+                            
+                            # Note: Because we added "(Line X)" to the sets previously, 
+                            # we need to extract just the base variable name to look up its type.
+                            for var_with_line in sorted(rw_regions.vr[REG_WITHIN]):
+                                base_name = var_with_line.split(" (Line")[0].strip()
+                                var_type = type_map.get(base_name, "Object") # Fallback to Object if unknown
+                                extracted_param_list.append(f"{var_type} {base_name}")
+                                
+                            extracted_params_str = html.escape(", ".join(extracted_param_list))
+
+                            # Helper function to format sets safely for HTML
+                            def fmt_set(var_set):
+                                return html.escape(", ".join(sorted(var_set))) if var_set else "<span style='color:#aaa'>None</span>"
+
                             # Add instance metadata using the template
                             html_content.append(tmpl_instance_meta.format(
                                 func_id=func_id,
@@ -139,6 +198,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 method_qualified=m_info.get("qualified"),
                                 m_start=m_start,
                                 m_end=m_end,
+                                extracted_params=extracted_params_str, # NEW ARGUMENT
                                 vr_pre=fmt_set(rw_regions.vr[REG_PRE]),
                                 vr_within=fmt_set(rw_regions.vr[REG_WITHIN]),
                                 vr_post=fmt_set(rw_regions.vr[REG_POST]),
@@ -146,6 +206,8 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 vw_within=fmt_set(rw_regions.vw[REG_WITHIN]),
                                 vw_post=fmt_set(rw_regions.vw[REG_POST])
                             ))
+
+
 
                             # Extract source and color it
                             method_source = parser.text_of(enclosing_record.node)

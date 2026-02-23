@@ -37,23 +37,28 @@
         <strong>File:</strong> systems/camel-java/components/camel-keycloak/src/main/java/org/apache/camel/component/keycloak/security/KeycloakSecurityHelper.java <br>
         <strong>Clone Range:</strong> 179-188 <br>
         <strong>Enclosing Method:</strong> KeycloakSecurityHelper.extractRolesFromIntrospection (Lines 172-209) <br>
+
+        <div style="background-color: #e8f4f8; border: 1px solid #b3d4fc; padding: 8px; margin-top: 10px; border-radius: 4px; font-family: monospace;">
+            <strong>Extracted Signature:</strong> <br>
+            <span style="color: #0066cc;">RETURN TYPE</span> <span style="color: #6f42c1;">extractedClone</span>(Object realmAccess, Object realmAccess, Set&lt;String&gt; roles)
+        </div>        
         
         <div style="margin-top: 10px; display: flex; gap: 20px;">
             <div style="border-left: 3px solid #4CAF50; padding-left: 10px;">
                 <strong>Variables Read (V_r):</strong><br>
                 <span style="font-size: 0.9em;">
                     <strong>Pre:</strong> <span style='color:#aaa'>None</span> <br>
-                    <strong>Within (Inputs!):</strong> realmAccess, roles <br>
-                    <strong>Post:</strong> clientAccess, clientAccessMap, clientRoles, clientRolesCollection, resourceAccess, resourceAccessMap, roles
+                    <strong>Within (Inputs!):</strong> realmAccess (Line 179), realmAccess (Line 181), roles (Line 186) <br>
+                    <strong>Post:</strong> clientAccess (Line 196), clientAccess (Line 198), clientAccessMap (Line 199), clientRoles (Line 200), clientRoles (Line 202), clientRolesCollection (Line 203), resourceAccess (Line 192), resourceAccess (Line 194), resourceAccessMap (Line 195), roles (Line 203), roles (Line 208)
                 </span>
             </div>
             
             <div style="border-left: 3px solid #F44336; padding-left: 10px;">
                 <strong>Variables Written (V_w):</strong><br>
                 <span style="font-size: 0.9em;">
-                    <strong>Pre:</strong> realmAccess, roles <br>
-                    <strong>Within:</strong> realmAccessMap, realmRoles, realmRolesCollection <br>
-                    <strong>Post:</strong> clientAccess, clientAccessMap, clientRoles, clientRolesCollection, resourceAccess, resourceAccessMap
+                    <strong>Pre:</strong> realmAccess (Line 178), roles (Line 175) <br>
+                    <strong>Within:</strong> realmAccessMap (Line 181), realmRoles (Line 182), realmRolesCollection (Line 185) <br>
+                    <strong>Post:</strong> clientAccess (Line 195), clientAccessMap (Line 198), clientRoles (Line 199), clientRolesCollection (Line 202), resourceAccess (Line 191), resourceAccessMap (Line 194)
                 </span>
             </div>
         </div>
@@ -104,22 +109,27 @@
         <strong>File:</strong> systems/camel-java/components/camel-keycloak/src/main/java/org/apache/camel/component/keycloak/security/KeycloakSecurityHelper.java <br>
         <strong>Clone Range:</strong> 196-205 <br>
         <strong>Enclosing Method:</strong> KeycloakSecurityHelper.extractRolesFromIntrospection (Lines 172-209) <br>
+
+        <div style="background-color: #e8f4f8; border: 1px solid #b3d4fc; padding: 8px; margin-top: 10px; border-radius: 4px; font-family: monospace;">
+            <strong>Extracted Signature:</strong> <br>
+            <span style="color: #0066cc;">RETURN TYPE</span> <span style="color: #6f42c1;">extractedClone</span>(Object clientAccess, Object clientAccess, Set&lt;String&gt; roles)
+        </div>        
         
         <div style="margin-top: 10px; display: flex; gap: 20px;">
             <div style="border-left: 3px solid #4CAF50; padding-left: 10px;">
                 <strong>Variables Read (V_r):</strong><br>
                 <span style="font-size: 0.9em;">
-                    <strong>Pre:</strong> realmAccess, realmAccessMap, realmRoles, realmRolesCollection, resourceAccess, resourceAccessMap, roles <br>
-                    <strong>Within (Inputs!):</strong> clientAccess, roles <br>
-                    <strong>Post:</strong> roles
+                    <strong>Pre:</strong> realmAccess (Line 179), realmAccess (Line 181), realmAccessMap (Line 182), realmRoles (Line 183), realmRoles (Line 185), realmRolesCollection (Line 186), resourceAccess (Line 192), resourceAccess (Line 194), resourceAccessMap (Line 195), roles (Line 186) <br>
+                    <strong>Within (Inputs!):</strong> clientAccess (Line 196), clientAccess (Line 198), roles (Line 203) <br>
+                    <strong>Post:</strong> roles (Line 208)
                 </span>
             </div>
             
             <div style="border-left: 3px solid #F44336; padding-left: 10px;">
                 <strong>Variables Written (V_w):</strong><br>
                 <span style="font-size: 0.9em;">
-                    <strong>Pre:</strong> clientAccess, realmAccess, realmAccessMap, realmRoles, realmRolesCollection, resourceAccess, resourceAccessMap, roles <br>
-                    <strong>Within:</strong> clientAccessMap, clientRoles, clientRolesCollection <br>
+                    <strong>Pre:</strong> clientAccess (Line 195), realmAccess (Line 178), realmAccessMap (Line 181), realmRoles (Line 182), realmRolesCollection (Line 185), resourceAccess (Line 191), resourceAccessMap (Line 194), roles (Line 175) <br>
+                    <strong>Within:</strong> clientAccessMap (Line 198), clientRoles (Line 199), clientRolesCollection (Line 202) <br>
                     <strong>Post:</strong> <span style='color:#aaa'>None</span>
                 </span>
             </div>
