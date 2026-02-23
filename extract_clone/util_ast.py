@@ -113,67 +113,54 @@ def collect_params(parser: JavaTreeSitterParser, decl) -> List[str]:
     return items
 
 
-def collect_local_vars(parser, method_node) -> List[Tuple[str, str]]:
+def collect_local_vars(parser, method_node) -> List[Tuple[str, str, int]]:
     """
-    Return a list of (type, name) for all local variables declared in the method body.
-    Avoids scope bleed into anonymous classes or lambda expressions.
+    Return a list of (type, name, line_number) for all local variables 
+    declared in the method body.
     """
-    locals_list: List[Tuple[str, str]] = []
+    locals_list: List[Tuple[str, str, int]] = []
     body = method_node.child_by_field_name("body")
     
     if not body:
         return locals_list
 
-    # Nodes that create a new, separate scope that we should not parse into
     scope_boundaries = {
-        "class_declaration", 
-        "interface_declaration", 
-        "object_creation_expression", # Protects against anonymous inner classes
-        "lambda_expression"           # Protects against lambda parameter bleed
+        "class_declaration", "interface_declaration", 
+        "object_creation_expression", "lambda_expression"
     }
 
     stack = [body]
     while stack:
         current = stack.pop()
+        
+        # Get the 1-based line number of this declaration
+        line_num = current.start_point[0] + 1
 
-        # 1. Standard Local Variable Declaration (e.g., List<String> items = new ArrayList<>();)
         if current.type == "local_variable_declaration":
             type_node = current.child_by_field_name("type")
             if type_node:
                 var_type = parser.text_of(type_node).strip()
-                
-                # Iterate through children to find all variable declarators
                 for child in current.children:
                     if child.type == "variable_declarator":
                         name_node = child.child_by_field_name("name")
                         if name_node:
                             var_name = parser.text_of(name_node).strip()
-                            locals_list.append((var_type, var_name))
+                            locals_list.append((var_type, var_name, line_num))
 
-        # 2. Enhanced For Loop (e.g., for (String s : list))
-        elif current.type == "enhanced_for_statement":
+        elif current.type in {"enhanced_for_statement", "catch_formal_parameter"}:
             type_node = current.child_by_field_name("type")
             name_node = current.child_by_field_name("name")
             if type_node and name_node:
                 var_type = parser.text_of(type_node).strip()
                 var_name = parser.text_of(name_node).strip()
-                locals_list.append((var_type, var_name))
+                locals_list.append((var_type, var_name, line_num))
 
-        # 3. Catch Clause Parameter (e.g., catch (IOException e))
-        elif current.type == "catch_formal_parameter":
-            type_node = current.child_by_field_name("type")
-            name_node = current.child_by_field_name("name")
-            if type_node and name_node:
-                var_type = parser.text_of(type_node).strip()
-                var_name = parser.text_of(name_node).strip()
-                locals_list.append((var_type, var_name))
-
-        # Add children to stack, stopping at scope boundaries
         for child in reversed(current.children):
             if child.type not in scope_boundaries:
                 stack.append(child)
 
     return locals_list
+
 
 def return_type(parser: JavaTreeSitterParser, decl) -> Optional[str]:
     """Return the return type of a method, or None if it is a constructor."""

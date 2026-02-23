@@ -98,7 +98,24 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                             m_info = enclosing_record.method_info
                             m_start = m_info.get("start_line")
                             m_end = m_info.get("end_line")
+
+                            # Extract and categorize local variables
+                            raw_locals = m_info.get("local_variables", [])
+                            pre_locals, clone_locals, post_locals = [], [], []
                             
+                            for var_type, var_name, line_num in raw_locals:
+                                formatted_var = f"{var_type} {var_name}"
+                                if line_num < clone_start:
+                                    pre_locals.append(formatted_var)
+                                elif clone_start <= line_num <= clone_end:
+                                    clone_locals.append(formatted_var)
+                                else:
+                                    post_locals.append(formatted_var)
+                            
+                            # Helper function to format lists safely for HTML
+                            def fmt_locals(var_list):
+                                return html.escape(", ".join(var_list)) if var_list else "<i>None</i>"
+
                             # Add instance metadata using the template
                             html_content.append(tmpl_instance_meta.format(
                                 func_id=func_id,
@@ -106,9 +123,11 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 range_str=range_str,
                                 method_qualified=m_info.get("qualified"),
                                 m_start=m_start,
-                                m_end=m_end
+                                m_end=m_end,
+                                local_vars_pre=fmt_locals(pre_locals),
+                                local_vars_clone=fmt_locals(clone_locals),
+                                local_vars_post=fmt_locals(post_locals)
                             ))
-                            
 
                             # Extract source and color it
                             method_source = parser.text_of(enclosing_record.node)
@@ -136,8 +155,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                     line_class = "after-clone"
                                     
                                 html_content.append(f'<span class="{line_class}">{escaped_line}</span>\n')
-
-
+                                    
                             # Close the tags opened in tmpl_instance_meta
                             html_content.append('</code></pre>\n</div>\n')
                             print(f"  > Generated HTML for {func_id} in {m_info.get('qualified')}")
