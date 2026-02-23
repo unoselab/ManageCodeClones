@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Camel Clone Visualization</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; padding: 20px; }
+        h1 { text-align: center; }
+        .clone-class { background: #fff; border: 1px solid #ddd; margin-bottom: 30px; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .clone-instance { margin-top: 15px; border-top: 2px dashed #eee; padding-top: 15px; }
+        .meta-info { font-size: 0.9em; color: #555; margin-bottom: 10px; }
+        pre { background-color: #fafafa; border: 1px solid #ccc; padding: 15px; overflow-x: auto; border-radius: 4px; line-height: 1.4; }
+        
+        /* Coloring rules */
+        .method-signature { color: #8b008b; font-weight: bold; } /* Dark Magenta */
+        .before-clone { color: blue; }
+        .in-clone { color: red; font-weight: bold; }
+        .after-clone { color: black; }
+    </style>
+</head>
+<body>
+    <h1>Clone Block Visualization</h1><div class="clone-class">
+    <h2>Clone Class ID: 110 (Instances: 2)</h2><div class="clone-instance">
+    <div class="meta-info">
+        <strong>Func ID:</strong> camel_110_91 <br>
+        <strong>File:</strong> systems/camel-java/components/camel-keycloak/src/main/java/org/apache/camel/component/keycloak/security/KeycloakSecurityHelper.java <br>
+        <strong>Clone Range:</strong> 179-188 <br>
+        <strong>Enclosing Method:</strong> KeycloakSecurityHelper.extractRolesFromIntrospection (Lines 172-209)
+    </div>
+    <pre><code><span class="method-signature">public static Set&lt;String&gt; extractRolesFromIntrospection(</span>
+<span class="method-signature">            KeycloakTokenIntrospector.IntrospectionResult introspectionResult,</span>
+<span class="method-signature">            String realm, String clientId) {</span>
+<span class="before-clone">        Set&lt;String&gt; roles = new HashSet&lt;&gt;();</span>
+<span class="before-clone"></span>
+<span class="before-clone">        // Extract roles from realm_access claim</span>
+<span class="before-clone">        Object realmAccess = introspectionResult.getClaim(&quot;realm_access&quot;);</span>
+<span class="in-clone">        if (realmAccess instanceof Map) {</span>
+<span class="in-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="in-clone">            Map&lt;String, Object&gt; realmAccessMap = (Map&lt;String, Object&gt;) realmAccess;</span>
+<span class="in-clone">            Object realmRoles = realmAccessMap.get(&quot;roles&quot;);</span>
+<span class="in-clone">            if (realmRoles instanceof Collection) {</span>
+<span class="in-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="in-clone">                Collection&lt;String&gt; realmRolesCollection = (Collection&lt;String&gt;) realmRoles;</span>
+<span class="in-clone">                roles.addAll(realmRolesCollection);</span>
+<span class="in-clone">            }</span>
+<span class="in-clone">        }</span>
+<span class="after-clone"></span>
+<span class="after-clone">        // Extract client roles from resource_access claim</span>
+<span class="after-clone">        Object resourceAccess = introspectionResult.getClaim(&quot;resource_access&quot;);</span>
+<span class="after-clone">        if (resourceAccess instanceof Map) {</span>
+<span class="after-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="after-clone">            Map&lt;String, Object&gt; resourceAccessMap = (Map&lt;String, Object&gt;) resourceAccess;</span>
+<span class="after-clone">            Object clientAccess = resourceAccessMap.get(clientId);</span>
+<span class="after-clone">            if (clientAccess instanceof Map) {</span>
+<span class="after-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="after-clone">                Map&lt;String, Object&gt; clientAccessMap = (Map&lt;String, Object&gt;) clientAccess;</span>
+<span class="after-clone">                Object clientRoles = clientAccessMap.get(&quot;roles&quot;);</span>
+<span class="after-clone">                if (clientRoles instanceof Collection) {</span>
+<span class="after-clone">                    @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="after-clone">                    Collection&lt;String&gt; clientRolesCollection = (Collection&lt;String&gt;) clientRoles;</span>
+<span class="after-clone">                    roles.addAll(clientRolesCollection);</span>
+<span class="after-clone">                }</span>
+<span class="after-clone">            }</span>
+<span class="after-clone">        }</span>
+<span class="after-clone"></span>
+<span class="after-clone">        return roles;</span>
+<span class="after-clone">    }</span>
+</code></pre>
+</div>
+<div class="clone-instance">
+    <div class="meta-info">
+        <strong>Func ID:</strong> camel_110_92 <br>
+        <strong>File:</strong> systems/camel-java/components/camel-keycloak/src/main/java/org/apache/camel/component/keycloak/security/KeycloakSecurityHelper.java <br>
+        <strong>Clone Range:</strong> 196-205 <br>
+        <strong>Enclosing Method:</strong> KeycloakSecurityHelper.extractRolesFromIntrospection (Lines 172-209)
+    </div>
+    <pre><code><span class="method-signature">public static Set&lt;String&gt; extractRolesFromIntrospection(</span>
+<span class="method-signature">            KeycloakTokenIntrospector.IntrospectionResult introspectionResult,</span>
+<span class="method-signature">            String realm, String clientId) {</span>
+<span class="before-clone">        Set&lt;String&gt; roles = new HashSet&lt;&gt;();</span>
+<span class="before-clone"></span>
+<span class="before-clone">        // Extract roles from realm_access claim</span>
+<span class="before-clone">        Object realmAccess = introspectionResult.getClaim(&quot;realm_access&quot;);</span>
+<span class="before-clone">        if (realmAccess instanceof Map) {</span>
+<span class="before-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="before-clone">            Map&lt;String, Object&gt; realmAccessMap = (Map&lt;String, Object&gt;) realmAccess;</span>
+<span class="before-clone">            Object realmRoles = realmAccessMap.get(&quot;roles&quot;);</span>
+<span class="before-clone">            if (realmRoles instanceof Collection) {</span>
+<span class="before-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="before-clone">                Collection&lt;String&gt; realmRolesCollection = (Collection&lt;String&gt;) realmRoles;</span>
+<span class="before-clone">                roles.addAll(realmRolesCollection);</span>
+<span class="before-clone">            }</span>
+<span class="before-clone">        }</span>
+<span class="before-clone"></span>
+<span class="before-clone">        // Extract client roles from resource_access claim</span>
+<span class="before-clone">        Object resourceAccess = introspectionResult.getClaim(&quot;resource_access&quot;);</span>
+<span class="before-clone">        if (resourceAccess instanceof Map) {</span>
+<span class="before-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="before-clone">            Map&lt;String, Object&gt; resourceAccessMap = (Map&lt;String, Object&gt;) resourceAccess;</span>
+<span class="before-clone">            Object clientAccess = resourceAccessMap.get(clientId);</span>
+<span class="in-clone">            if (clientAccess instanceof Map) {</span>
+<span class="in-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="in-clone">                Map&lt;String, Object&gt; clientAccessMap = (Map&lt;String, Object&gt;) clientAccess;</span>
+<span class="in-clone">                Object clientRoles = clientAccessMap.get(&quot;roles&quot;);</span>
+<span class="in-clone">                if (clientRoles instanceof Collection) {</span>
+<span class="in-clone">                    @SuppressWarnings(&quot;unchecked&quot;)</span>
+<span class="in-clone">                    Collection&lt;String&gt; clientRolesCollection = (Collection&lt;String&gt;) clientRoles;</span>
+<span class="in-clone">                    roles.addAll(clientRolesCollection);</span>
+<span class="in-clone">                }</span>
+<span class="in-clone">            }</span>
+<span class="after-clone">        }</span>
+<span class="after-clone"></span>
+<span class="after-clone">        return roles;</span>
+<span class="after-clone">    }</span>
+</code></pre>
+</div>
+</div>
+</body>
+</html>
