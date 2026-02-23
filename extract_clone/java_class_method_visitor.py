@@ -1,7 +1,9 @@
 from typing import Iterable, Optional, List, Dict
 from java_treesitter_parser import JavaTreeSitterParser
 from util_ast import (
-    class_name, enclosing_class_name, method_name, collect_modifiers, collect_params, return_type, iter_descendants, methods_directly_under,
+    class_name, enclosing_class_name, method_name, collect_modifiers, 
+    collect_params, return_type, iter_descendants, methods_directly_under,
+    collect_local_vars  
 )
 
 # Node types in the Java AST that represent "class-like" constructs
@@ -68,7 +70,7 @@ class JavaClassMethodVisitor:
         """
         Internal helper.
         Given a method declaration node, extract all relevant info
-        (name, modifiers, return type, parameters, position, etc.)
+        (name, modifiers, return type, parameters, local variables, position, etc.)
         and forward it to the visit_method hook.
         """
         parser = self.parser
@@ -92,6 +94,9 @@ class JavaClassMethodVisitor:
         # Collect parameter list as strings
         params = collect_params(parser, decl)
 
+        # Collect local variables as a list of (type, name) tuples
+        local_vars = collect_local_vars(parser, decl)
+
         # Compute source positions (both offsets and line numbers)
         start_char = parser.char_offset(decl.start_byte)
         end_char = parser.char_offset(decl.end_byte)
@@ -110,6 +115,7 @@ class JavaClassMethodVisitor:
             "modifiers": mods,           # List of modifiers
             "return_type": rtype,        # Return type (None for constructors)
             "parameters": params,        # Parameter list
+            "local_variables": local_vars, # List of (type, name) tuples for local variables
             "start_line": start_line,    # Start line number
             "end_line": end_line,        # End line number
             "start_offset": start_char,  # Start character offset in file
