@@ -6,6 +6,7 @@ from pathlib import Path
 
 # Import the indexer from your existing code
 from index_methods import FileMethodIndex
+from util_ast import extract_rw_by_region, REG_PRE, REG_WITHIN, REG_POST
 
 def find_enclosing_method(methods, clone_start: int, clone_end: int):
     """
@@ -29,6 +30,12 @@ def load_template(template_name: str) -> str:
         print(f"Error: Required template file '{path}' is missing.")
         sys.exit(1)
     return path.read_text(encoding="utf-8")
+
+
+# Helper function to format sets safely for HTML
+def fmt_set(var_set):
+    return html.escape(", ".join(sorted(var_set))) if var_set else "<span style='color:#aaa'>None</span>"
+
 
 def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
     """
@@ -104,18 +111,26 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                             pre_locals, clone_locals, post_locals = [], [], []
                             
                             for var_type, var_name, line_num in raw_locals:
-                                formatted_var = f"{var_type} {var_name}"
+                                # Add the line number to the formatted string!
+                                formatted_var = f"{var_type} {var_name} (Line {line_num})"
+                                
                                 if line_num < clone_start:
                                     pre_locals.append(formatted_var)
                                 elif clone_start <= line_num <= clone_end:
                                     clone_locals.append(formatted_var)
                                 else:
                                     post_locals.append(formatted_var)
-                            
-                            # Helper function to format lists safely for HTML
-                            def fmt_locals(var_list):
-                                return html.escape(", ".join(var_list)) if var_list else "<i>None</i>"
+                                    
 
+                            # --- Run Data-Flow Analysis ---
+                            rw_regions = extract_rw_by_region(
+                                parser, 
+                                enclosing_record.node, 
+                                clone_start, 
+                                clone_end, 
+                                only_method_scope=True
+                            )
+                            
                             # Add instance metadata using the template
                             html_content.append(tmpl_instance_meta.format(
                                 func_id=func_id,
@@ -124,9 +139,12 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 method_qualified=m_info.get("qualified"),
                                 m_start=m_start,
                                 m_end=m_end,
-                                local_vars_pre=fmt_locals(pre_locals),
-                                local_vars_clone=fmt_locals(clone_locals),
-                                local_vars_post=fmt_locals(post_locals)
+                                vr_pre=fmt_set(rw_regions.vr[REG_PRE]),
+                                vr_within=fmt_set(rw_regions.vr[REG_WITHIN]),
+                                vr_post=fmt_set(rw_regions.vr[REG_POST]),
+                                vw_pre=fmt_set(rw_regions.vw[REG_PRE]),
+                                vw_within=fmt_set(rw_regions.vw[REG_WITHIN]),
+                                vw_post=fmt_set(rw_regions.vw[REG_POST])
                             ))
 
                             # Extract source and color it
@@ -153,9 +171,13 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                         line_class = "before-clone"
                                 else:
                                     line_class = "after-clone"
-                                    
-                                html_content.append(f'<span class="{line_class}">{escaped_line}</span>\n')
-                                    
+
+                                # Inject the line number span right before the code span
+                                html_content.append(
+                                    f'<span class="line-number">{current_line_num}</span>'
+                                    f'<span class="{line_class}">{escaped_line}</span>\n'
+                                )
+
                             # Close the tags opened in tmpl_instance_meta
                             html_content.append('</code></pre>\n</div>\n')
                             print(f"  > Generated HTML for {func_id} in {m_info.get('qualified')}")

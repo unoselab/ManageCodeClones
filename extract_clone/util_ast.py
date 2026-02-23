@@ -1,5 +1,6 @@
 from typing import Iterable, Optional, List
-from typing import Tuple
+from typing import Set, Dict, Tuple
+from dataclasses import dataclass
 from java_treesitter_parser import JavaTreeSitterParser
 
 _METHOD_NODES = {
@@ -160,6 +161,136 @@ def collect_local_vars(parser, method_node) -> List[Tuple[str, str, int]]:
                 stack.append(child)
 
     return locals_list
+
+
+# --- Constants for Data-Flow Regions ---
+REG_PRE = "PRE"
+REG_WITHIN = "WITHIN"
+REG_POST = "POST"
+
+@dataclass
+class RWRegions:
+    """Stores the read (vr) and write (vw) sets for local variables across regions."""
+    locals_in_method: Set[str]
+    params_in_method: Set[str]
+    vr: Dict[str, Set[str]]
+    vw: Dict[str, Set[str]]
+
+def _region_for_line(line: int, clone_start: int, clone_end: int) -> str:
+    """Classifies a line number into Pre, Within, or Post clone regions."""
+    if line < clone_start:
+        return REG_PRE
+    elif line > clone_end:
+        return REG_POST
+    else:
+        return REG_WITHIN
+
+def classify_identifier_rw(node) -> Tuple[bool, bool]:
+    """
+    Determines if an identifier node is being Read (is_r) and/or Written (is_w).
+    Returns a tuple: (is_r, is_w)
+    """
+    is_r = True
+    is_w = False
+    
+    parent = node.parent
+    if not parent:
+        return (is_r, is_w)
+
+    # 1. Assignment Expression (e.g., x = 5, x += 2)
+    if parent.type == "assignment_expression":
+        left_node = parent.child_by_field_name("left")
+        if left_node == node:
+            is_w = True
+            operator_node = parent.child_by_field_name("operator")
+            # If it's a simple assignment '=', it's only a write.
+            # If it's a compound assignment (e.g., '+=', '-='), it is a read AND a write.
+            if operator_node and operator_node.type == "=":
+                is_r = False
+
+    # 2. Variable Declaration (e.g., int x = 5;)
+    elif parent.type == "variable_declarator":
+        name_node = parent.child_by_field_name("name")
+        if name_node == node:
+            is_w = True
+            is_r = False  # Initialization is considered a pure write
+
+    # 3. Update Expression (e.g., x++, --y)
+    elif parent.type == "update_expression":
+        # Increment/decrement operations read the value, modify it, and write it back
+        is_w = True
+        is_r = True
+
+    # 4. Enhanced For Statement (e.g., for(String s : list))
+    elif parent.type == "enhanced_for_statement":
+        name_node = parent.child_by_field_name("name")
+        if name_node == node:
+            is_w = True
+            is_r = False  # The loop variable is being bound/written to
+
+    # 5. Catch Clause (e.g., catch(Exception e))
+    elif parent.type == "catch_formal_parameter":
+        name_node = parent.child_by_field_name("name")
+        if name_node == node:
+            is_w = True
+            is_r = False  # The exception variable is bound here
+
+    return (is_r, is_w)
+
+
+def extract_rw_by_region(
+    parser,
+    method_node,
+    clone_start: int,
+    clone_end: int,
+    only_method_scope: bool = True,
+) -> RWRegions:
+    """
+    Compute variable read/write sets (V_r, V_w) for pre/within/post clone regions.
+    """
+    params = set(collect_params(parser, method_node))
+    
+    # FIX: Use our tuple-based function, then extract just the variable names into a Set
+    raw_locals = collect_local_vars(parser, method_node)
+    locals_ = {var_name for var_type, var_name, line_num in raw_locals}
+    
+    scope_vars = params | locals_
+
+    vr = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
+    vw = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
+    
+    locally_defined_within: Set[str] = set()
+
+    # iter_descendants must yield nodes in document order
+    for n in iter_descendants(method_node):
+        if n.type != "identifier":
+            continue
+
+        name = parser.text_of(n)
+        if only_method_scope and name not in scope_vars:
+            continue
+
+        line = n.start_point[0] + 1
+        region = _region_for_line(line, clone_start, clone_end)
+        is_r, is_w = classify_identifier_rw(n)
+
+        if region == REG_WITHIN:
+            if is_r and name not in locally_defined_within:
+                vr[region].add(name)
+            
+            if is_w:
+                vw[region].add(name)
+                locally_defined_within.add(name)
+        else:
+            if is_r: vr[region].add(name)
+            if is_w: vw[region].add(name)
+
+    return RWRegions(
+        locals_in_method=locals_,
+        params_in_method=params,
+        vr=vr,
+        vw=vw,
+    )
 
 
 def return_type(parser: JavaTreeSitterParser, decl) -> Optional[str]:

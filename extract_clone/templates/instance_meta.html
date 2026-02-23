@@ -4,10 +4,25 @@
         <strong>File:</strong> {rel_file} <br>
         <strong>Clone Range:</strong> {range_str} <br>
         <strong>Enclosing Method:</strong> {method_qualified} (Lines {m_start}-{m_end}) <br>
-        <div style="margin-left: 15px; border-left: 2px solid #ccc; padding-left: 10px; margin-top: 5px;">
-            <strong>Local Vars (Pre):</strong> {local_vars_pre} <br>
-            <strong>Local Vars (Clone):</strong> {local_vars_clone} <br>
-            <strong>Local Vars (Post):</strong> {local_vars_post}
+        
+        <div style="margin-top: 10px; display: flex; gap: 20px;">
+            <div style="border-left: 3px solid #4CAF50; padding-left: 10px;">
+                <strong>Variables Read (V_r):</strong><br>
+                <span style="font-size: 0.9em;">
+                    <strong>Pre:</strong> {vr_pre} <br>
+                    <strong>Within (Inputs!):</strong> {vr_within} <br>
+                    <strong>Post:</strong> {vr_post}
+                </span>
+            </div>
+            
+            <div style="border-left: 3px solid #F44336; padding-left: 10px;">
+                <strong>Variables Written (V_w):</strong><br>
+                <span style="font-size: 0.9em;">
+                    <strong>Pre:</strong> {vw_pre} <br>
+                    <strong>Within:</strong> {vw_within} <br>
+                    <strong>Post:</strong> {vw_post}
+                </span>
+            </div>
         </div>
     </div>
     <pre><code>
