@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from AST_Clone_Extractability.io_nicad import load_nicad, write_output
 from AST_Clone_Extractability.index_methods import FileMethodIndex
 from AST_Clone_Extractability.rw_vars import extract_rw_by_region
-from AST_Clone_Extractability.feasibility import compute_in_out, decide_extractable
+from AST_Clone_Extractability.feasibility import compute_in_out, compute_in_out_types, decide_extractable
 from AST_Clone_Extractability.hazards import detect_cf_hazard_detail
 
 
@@ -138,7 +138,7 @@ def analyze_nicad(
             # RW extraction uses the enclosing method_node (so pre/post are within that method scope)
             rw = extract_rw_by_region(parser, method_node, clone_start, clone_end, only_method_scope=True)
 
-            In, Out = compute_in_out(rw)
+            In, Out, InType, OutType = compute_in_out_types(rw)
             cf_hazard, hazard_detail = detect_cf_hazard_detail(method_node, clone_start, clone_end)
             extractable = decide_extractable(In, Out, cf_hazard, P=P, R=R)
 
@@ -190,7 +190,10 @@ def analyze_nicad(
 
             # feasibility
             new_inst["In"] = sorted(In)
+            new_inst["InType"] = sorted(InType)
             new_inst["Out"] = sorted(Out)
+            # NEW: type sets (may be empty if type info is missing or In/Out empty)
+            new_inst["OutType"] = sorted(OutType)
             new_inst["CFHazard"] = cf_hazard
             new_inst["CFHazard_detail"] = hazard_detail
             new_inst["Extractable"] = extractable
@@ -239,7 +242,7 @@ def main() -> None:
     ap.add_argument("--input", required=True, help="NiCad JSON or JSONL")
     ap.add_argument("--output", required=True, help="Output JSON/JSONL")
     ap.add_argument("--jsonl", action="store_true", help="Write JSONL output")
-    ap.add_argument("--P", type=int, default=7, help="Max allowed parameter count (|In(i)|)")
+    ap.add_argument("--P", type=int, default=None, help="Max allowed parameter count (|In(i)|)")
     ap.add_argument("--R", type=int, default=1, help="Max allowed return count (|Out(i)|). Java default is 1.")
     ap.add_argument("--debug-hazard", action="store_true", help="Print hazard details per clone instance")
     args = ap.parse_args()

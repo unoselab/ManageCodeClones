@@ -19,6 +19,11 @@ def _region_for_line(line: int, start: int, end: int) -> str:
         return REG_POST
     return REG_WITHIN
 
+def _type_text(parser, type_node) -> Optional[str]:
+    if not type_node:
+        return None
+    t = parser.text_of(type_node).strip()
+    return t if t else None
 
 def collect_parameters(parser, method_node) -> Set[str]:
     """Return names of formal parameters of the enclosing method/constructor."""
@@ -34,6 +39,23 @@ def collect_parameters(parser, method_node) -> Set[str]:
                 params.add(parser.text_of(nm))
     return params
 
+def collect_param_types(parser, method_node) -> Dict[str, str]:
+    """Return parameter name -> declared type text."""
+    out: Dict[str, str] = {}
+    param_list = method_node.child_by_field_name("parameters")
+    if not param_list:
+        return out
+
+    for n in iter_descendants_cursor(param_list):
+        if n.type in {"formal_parameter", "spread_parameter"}:
+            nm = n.child_by_field_name("name")
+            tp = n.child_by_field_name("type")
+            if nm and nm.type == "identifier":
+                name = parser.text_of(nm)
+                ttxt = _type_text(parser, tp)
+                if ttxt:
+                    out[name] = ttxt
+    return out
 
 def collect_locals(parser, method_node) -> Set[str]:
     """Return names of local variables declared in the method body."""
@@ -51,6 +73,28 @@ def collect_locals(parser, method_node) -> Set[str]:
                         locals_.add(parser.text_of(nm))
     return locals_
 
+def collect_local_types(parser, method_node) -> Dict[str, str]:
+    """Return local variable name -> declared type text."""
+    out: Dict[str, str] = {}
+    body = method_node.child_by_field_name("body")
+    if not body:
+        return out
+
+    for n in iter_descendants_cursor(body):
+        if n.type != "local_variable_declaration":
+            continue
+
+        decl_type = _type_text(parser, n.child_by_field_name("type"))
+        if not decl_type:
+            continue
+
+        for d in iter_descendants_cursor(n):
+            if d.type == "variable_declarator":
+                nm = d.child_by_field_name("name")
+                if nm and nm.type == "identifier":
+                    out[parser.text_of(nm)] = decl_type
+
+    return out
 
 def _is_descendant(node, ancestor) -> bool:
     cur = node
@@ -118,6 +162,7 @@ def classify_identifier_rw(ident_node) -> Tuple[bool, bool]:
 class RWRegions:
     locals_in_method: Set[str]
     params_in_method: Set[str]
+    var_types: Dict[str, str]        # NEW
     vr: Dict[str, Set[str]]  # region -> variable names
     vw: Dict[str, Set[str]]  # region -> variable names
 
@@ -147,6 +192,13 @@ def extract_rw_by_region(
     params = collect_parameters(parser, method_node)
     locals_ = collect_locals(parser, method_node)
     scope_vars = params | locals_
+
+    # NEW: types (minimal; only params + locals)
+    var_types: Dict[str, str] = {}
+    var_types.update(collect_param_types(parser, method_node))
+    var_types.update(collect_local_types(parser, method_node))
+    if only_method_scope:
+        var_types = {k: v for k, v in var_types.items() if k in scope_vars}
 
     vr = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
     vw = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
@@ -184,6 +236,7 @@ def extract_rw_by_region(
     return RWRegions(
         locals_in_method=locals_,
         params_in_method=params,
+        var_types=var_types,   # NEW
         vr=vr,
         vw=vw,
     )
