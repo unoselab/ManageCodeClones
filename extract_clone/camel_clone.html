@@ -82,14 +82,14 @@
 <span class="line-number">176</span><span class="before-clone"></span>
 <span class="line-number">177</span><span class="before-clone">        // Extract roles from realm_access claim</span>
 <span class="line-number">178</span><span class="before-clone">        Object realmAccess = introspectionResult.getClaim(&quot;realm_access&quot;);</span>
-<span class="line-number">179</span><span class="in-clone">        if (realmAccess instanceof Map) {</span>
+<span class="line-number">179</span><span class="in-clone">        if (<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">realmAccess</span> instanceof Map) {</span>
 <span class="line-number">180</span><span class="in-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
-<span class="line-number">181</span><span class="in-clone">            Map&lt;String, Object&gt; realmAccessMap = (Map&lt;String, Object&gt;) realmAccess;</span>
-<span class="line-number">182</span><span class="in-clone">            Object realmRoles = realmAccessMap.get(&quot;roles&quot;);</span>
+<span class="line-number">181</span><span class="in-clone">            Map&lt;String, Object&gt; realmAccessMap = (Map&lt;String, Object&gt;) <span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">realmAccess</span>;</span>
+<span class="line-number">182</span><span class="in-clone">            Object realmRoles = realmAccessMap.get(&quot;<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">roles</span>&quot;);</span>
 <span class="line-number">183</span><span class="in-clone">            if (realmRoles instanceof Collection) {</span>
 <span class="line-number">184</span><span class="in-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
 <span class="line-number">185</span><span class="in-clone">                Collection&lt;String&gt; realmRolesCollection = (Collection&lt;String&gt;) realmRoles;</span>
-<span class="line-number">186</span><span class="in-clone">                roles.addAll(realmRolesCollection);</span>
+<span class="line-number">186</span><span class="in-clone">                <span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">roles</span>.addAll(realmRolesCollection);</span>
 <span class="line-number">187</span><span class="in-clone">            }</span>
 <span class="line-number">188</span><span class="in-clone">        }</span>
 <span class="line-number">189</span><span class="after-clone"></span>
@@ -183,14 +183,14 @@
 <span class="line-number">193</span><span class="before-clone">            @SuppressWarnings(&quot;unchecked&quot;)</span>
 <span class="line-number">194</span><span class="before-clone">            Map&lt;String, Object&gt; resourceAccessMap = (Map&lt;String, Object&gt;) resourceAccess;</span>
 <span class="line-number">195</span><span class="before-clone">            Object clientAccess = resourceAccessMap.get(clientId);</span>
-<span class="line-number">196</span><span class="in-clone">            if (clientAccess instanceof Map) {</span>
+<span class="line-number">196</span><span class="in-clone">            if (<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">clientAccess</span> instanceof Map) {</span>
 <span class="line-number">197</span><span class="in-clone">                @SuppressWarnings(&quot;unchecked&quot;)</span>
-<span class="line-number">198</span><span class="in-clone">                Map&lt;String, Object&gt; clientAccessMap = (Map&lt;String, Object&gt;) clientAccess;</span>
-<span class="line-number">199</span><span class="in-clone">                Object clientRoles = clientAccessMap.get(&quot;roles&quot;);</span>
+<span class="line-number">198</span><span class="in-clone">                Map&lt;String, Object&gt; clientAccessMap = (Map&lt;String, Object&gt;) <span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">clientAccess</span>;</span>
+<span class="line-number">199</span><span class="in-clone">                Object clientRoles = clientAccessMap.get(&quot;<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">roles</span>&quot;);</span>
 <span class="line-number">200</span><span class="in-clone">                if (clientRoles instanceof Collection) {</span>
 <span class="line-number">201</span><span class="in-clone">                    @SuppressWarnings(&quot;unchecked&quot;)</span>
 <span class="line-number">202</span><span class="in-clone">                    Collection&lt;String&gt; clientRolesCollection = (Collection&lt;String&gt;) clientRoles;</span>
-<span class="line-number">203</span><span class="in-clone">                    roles.addAll(clientRolesCollection);</span>
+<span class="line-number">203</span><span class="in-clone">                    <span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">roles</span>.addAll(clientRolesCollection);</span>
 <span class="line-number">204</span><span class="in-clone">                }</span>
 <span class="line-number">205</span><span class="in-clone">            }</span>
 <span class="line-number">206</span><span class="after-clone">        }</span>

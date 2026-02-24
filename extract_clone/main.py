@@ -1,3 +1,4 @@
+import re
 import argparse
 import json
 import sys
@@ -237,6 +238,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 vw_post=fmt_set(rw_regions.vw[REG_POST])
                             ))
 
+
                             # Extract source and color it
                             method_source = parser.text_of(enclosing_record.node)
                             source_lines = method_source.split('\n')
@@ -251,10 +253,20 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 if clone_start <= current_line_num <= clone_end:
                                     line_class = "in-clone"
                                     in_signature = False # Safety catch: clones are in the body
+                                    
+                                    # --- NEW: Highlight Use(i) variables ---
+                                    # We sort by length descending so that if a variable is "role" and another is "roles",
+                                    # we don't accidentally match the prefix first!
+                                    for var in sorted(use_set, key=len, reverse=True):
+                                        # Use regex word boundaries (\b) to prevent partial matches
+                                        # and wrap the matched word in a yellow background span
+                                        pattern = rf'\b({re.escape(var)})\b'
+                                        highlight_tag = r'<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">\1</span>'
+                                        escaped_line = re.sub(pattern, highlight_tag, escaped_line)
+                                        
                                 elif current_line_num < clone_start:
                                     if in_signature:
                                         line_class = "method-signature"
-                                        # The signature usually ends at the first opening brace
                                         if '{' in raw_line:
                                             in_signature = False
                                     else:
@@ -267,6 +279,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                     f'<span class="line-number">{current_line_num}</span>'
                                     f'<span class="{line_class}">{escaped_line}</span>\n'
                                 )
+
 
                             # Close the tags opened in tmpl_instance_meta
                             html_content.append('</code></pre>\n</div>\n')
