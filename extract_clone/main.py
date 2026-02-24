@@ -122,35 +122,6 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                     post_locals.append(formatted_var)
 
 
-
-                                    
-
-                            # # --- Run Data-Flow Analysis ---
-                            # rw_regions = extract_rw_by_region(
-                            #     parser, 
-                            #     enclosing_record.node, 
-                            #     clone_start, 
-                            #     clone_end, 
-                            #     only_method_scope=True
-                            # )
-                            
-                            # # Add instance metadata using the template
-                            # html_content.append(tmpl_instance_meta.format(
-                            #     func_id=func_id,
-                            #     rel_file=rel_file,
-                            #     range_str=range_str,
-                            #     method_qualified=m_info.get("qualified"),
-                            #     m_start=m_start,
-                            #     m_end=m_end,
-                            #     vr_pre=fmt_set(rw_regions.vr[REG_PRE]),
-                            #     vr_within=fmt_set(rw_regions.vr[REG_WITHIN]),
-                            #     vr_post=fmt_set(rw_regions.vr[REG_POST]),
-                            #     vw_pre=fmt_set(rw_regions.vw[REG_PRE]),
-                            #     vw_within=fmt_set(rw_regions.vw[REG_WITHIN]),
-                            #     vw_post=fmt_set(rw_regions.vw[REG_POST])
-                            # ))
-
-
                             # --- Run Data-Flow Analysis ---
                             rw_regions = extract_rw_by_region(
                                 parser, 
@@ -173,17 +144,38 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                             for var_type, var_name, _ in m_info.get("local_variables", []):
                                 type_map[var_name] = var_type
 
-                            # --- 2. Synthesize the Extracted Parameters ---
-                            # The required parameters are the Variables Read WITHIN the clone.
-                            extracted_param_list = []
+
+
+                            # # --- 2. Synthesize the Extracted Parameters ---
+                            # # The required parameters are the Variables Read WITHIN the clone.
+                            # extracted_param_list = []
                             
-                            # Note: Because we added "(Line X)" to the sets previously, 
-                            # we need to extract just the base variable name to look up its type.
+                            # # Note: Because we added "(Line X)" to the sets previously, 
+                            # # we need to extract just the base variable name to look up its type.
+                            # for var_with_line in sorted(rw_regions.vr[REG_WITHIN]):
+                            #     base_name = var_with_line.split(" (Line")[0].strip()
+                            #     var_type = type_map.get(base_name, "Object") # Fallback to Object if unknown
+                            #     extracted_param_list.append(f"{var_type} {base_name}")
+                                
+
+
+
+                            # --- 2. Synthesize the Extracted Parameters ---
+                            extracted_param_list = []
+                            seen_params = set()
+                            
                             for var_with_line in sorted(rw_regions.vr[REG_WITHIN]):
                                 base_name = var_with_line.split(" (Line")[0].strip()
-                                var_type = type_map.get(base_name, "Object") # Fallback to Object if unknown
-                                extracted_param_list.append(f"{var_type} {base_name}")
                                 
+                                # Deduplicate: Only add it to the signature if we haven't seen it yet
+                                if base_name not in seen_params:
+                                    var_type = type_map.get(base_name, "Object")
+                                    extracted_param_list.append(f"{var_type} {base_name}")
+                                    seen_params.add(base_name)
+
+
+
+
                             extracted_params_str = html.escape(", ".join(extracted_param_list))
 
                             # Helper function to format sets safely for HTML
