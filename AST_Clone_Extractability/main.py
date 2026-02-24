@@ -41,7 +41,7 @@ def _resolve_enclosing_method(
     Find the *enclosing* method node that contains [clone_start, clone_end].
     Chooses the smallest enclosing method by span.
     Returns:
-      (method_node, resolved_qname, resolved_method_info, resolved_ok)
+      (method_node, resolved_qname, resolved_method_info, resolved_method_record, resolved_ok)
     """
     best_mr = None
     best_q = None
@@ -60,10 +60,10 @@ def _resolve_enclosing_method(
             best_span = span
 
     if best_mr is not None:
-        return best_mr.node, best_q, best_mr.method_info, True
+        return best_mr.node, best_q, best_mr.method_info, best_mr,True
 
     # fallback
-    return parser.root, None, None, False
+    return parser.root, None, None, None, False
 
 
 def _region_ranges(fun_start: int, fun_end: int, clone_start: int, clone_end: int) -> Dict[str, str]:
@@ -105,7 +105,7 @@ def analyze_nicad(
             parser, methods = idx.get(file_path)
 
             # Always resolve the enclosing function by clone range containment
-            method_node, resolved_qname, resolved_mi, resolved_ok = _resolve_enclosing_method(
+            method_node, resolved_qname, resolved_mi, resolved_mr, resolved_ok = _resolve_enclosing_method(
                 parser=parser,
                 methods=methods,
                 clone_start=clone_start,
@@ -120,6 +120,20 @@ def analyze_nicad(
                 # If we can't resolve a function, we can't define meaningful pre/post.
                 # Fallback to clone range only.
                 fun_start, fun_end = clone_start, clone_end
+
+            # Extract enclosing function source code
+            func_code = None
+            if resolved_ok and resolved_mr is not None:
+                # Preferred: use parser helper if available
+                if hasattr(parser, "text_of"):
+                    func_code = parser.text_of(resolved_mr.node)
+                else:
+                    # Fallback: try common field on parser for source bytes
+                    source_bytes = getattr(parser, "source_bytes", None)
+                    if source_bytes is not None:
+                        func_code = source_bytes[resolved_mr.node.start_byte : resolved_mr.node.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
 
             # RW extraction uses the enclosing method_node (so pre/post are within that method scope)
             rw = extract_rw_by_region(parser, method_node, clone_start, clone_end, only_method_scope=True)
@@ -151,6 +165,7 @@ def analyze_nicad(
                 "fun_range": f"{fun_start}-{fun_end}",
                 "fun_nlines": (fun_end - fun_start + 1) if fun_end >= fun_start else 0,
                 "resolved_ok": resolved_ok,
+                "func_code": func_code,
             }
 
             # Add explicit region ranges derived from enclosing function range + clone range
