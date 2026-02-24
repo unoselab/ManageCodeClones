@@ -40,15 +40,21 @@
 
         <div style="background-color: #e8f4f8; border: 1px solid #b3d4fc; padding: 8px; margin-top: 10px; border-radius: 4px; font-family: monospace;">
             <strong>Extracted Signature:</strong> <br>
-            <span style="color: #0066cc;">RETURN_TYPE</span> <span style="color: #6f42c1;">extractedClone</span>(Object realmAccess, Set&lt;String&gt; roles)
+            <span style="color: #0066cc;">public void</span> <span style="color: #6f42c1;">extractedClone</span>(Object realmAccess, Set&lt;String&gt; roles)
             
             <div style="margin-top: 8px; font-size: 0.9em; color: #444; border-top: 1px dashed #b3d4fc; padding-top: 5px;">
                 <strong>Parameters Derivation:</strong> <br>
                 In(i) = Use(i) &cap; Def<sub>before</sub>(i) <br>
                 In(i) = {realmAccess, roles} &cap; {clientId, introspectionResult, realm, realmAccess, roles} = <strong>{realmAccess, roles}</strong>
             </div>
-        </div>
-        
+
+            <div style="margin-top: 8px; font-size: 0.9em; color: #444; border-top: 1px dashed #b3d4fc; padding-top: 5px;">
+                <strong>Return Derivation:</strong> <br>
+                Out(i) = Def<sub>within</sub>(i) &cap; Use<sub>after</sub>(i) <br>
+                Out(i) = {realmAccessMap, realmRoles, realmRolesCollection} &cap; {clientAccess, clientAccessMap, clientRoles, clientRolesCollection, resourceAccess, resourceAccessMap, roles} = <strong>{}</strong>
+            </div>
+        </div>        
+
         <div style="margin-top: 10px; display: flex; gap: 20px;">
             <div style="border-left: 3px solid #4CAF50; padding-left: 10px;">
                 <strong>Variables Read (V_r):</strong><br>
@@ -118,15 +124,21 @@
 
         <div style="background-color: #e8f4f8; border: 1px solid #b3d4fc; padding: 8px; margin-top: 10px; border-radius: 4px; font-family: monospace;">
             <strong>Extracted Signature:</strong> <br>
-            <span style="color: #0066cc;">RETURN_TYPE</span> <span style="color: #6f42c1;">extractedClone</span>(Object clientAccess, Set&lt;String&gt; roles)
+            <span style="color: #0066cc;">public void</span> <span style="color: #6f42c1;">extractedClone</span>(Object clientAccess, Set&lt;String&gt; roles)
             
             <div style="margin-top: 8px; font-size: 0.9em; color: #444; border-top: 1px dashed #b3d4fc; padding-top: 5px;">
                 <strong>Parameters Derivation:</strong> <br>
                 In(i) = Use(i) &cap; Def<sub>before</sub>(i) <br>
                 In(i) = {clientAccess, roles} &cap; {clientAccess, clientId, introspectionResult, realm, realmAccess, realmAccessMap, realmRoles, realmRolesCollection, resourceAccess, resourceAccessMap, roles} = <strong>{clientAccess, roles}</strong>
             </div>
-        </div>
-        
+
+            <div style="margin-top: 8px; font-size: 0.9em; color: #444; border-top: 1px dashed #b3d4fc; padding-top: 5px;">
+                <strong>Return Derivation:</strong> <br>
+                Out(i) = Def<sub>within</sub>(i) &cap; Use<sub>after</sub>(i) <br>
+                Out(i) = {clientAccessMap, clientRoles, clientRolesCollection} &cap; {roles} = <strong>{}</strong>
+            </div>
+        </div>        
+
         <div style="margin-top: 10px; display: flex; gap: 20px;">
             <div style="border-left: 3px solid #4CAF50; padding-left: 10px;">
                 <strong>Variables Read (V_r):</strong><br>

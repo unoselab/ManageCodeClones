@@ -181,6 +181,38 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                             # In(i) = Use(i) ∩ Def_before(i)
                             in_set = use_set.intersection(def_before_set)
 
+
+
+                            # --- 4. Synthesize the Return Type Derivation ---
+                            # Def_within(i) = Variables written inside the clone
+                            def_within_set = set()
+                            for var_with_line in rw_regions.vw[REG_WITHIN]:
+                                base_name = var_with_line.split(" (Line")[0].strip()
+                                def_within_set.add(base_name)
+                                
+                            # Use_after(i) = Variables read after the clone
+                            use_after_set = set()
+                            for var_with_line in rw_regions.vr[REG_POST]:
+                                base_name = var_with_line.split(" (Line")[0].strip()
+                                use_after_set.add(base_name)
+                                
+                            # Out(i) = Def_within(i) ∩ Use_after(i)
+                            out_set = def_within_set.intersection(use_after_set)
+                            
+                            # Determine the Java return type
+                            if len(out_set) == 0:
+                                return_type_str = "void"
+                            elif len(out_set) == 1:
+                                ret_var = list(out_set)[0]
+                                return_type_str = type_map.get(ret_var, "Object")
+                            else:
+                                # Multiple variables need returning (Extract Method Object refactoring needed)
+                                ret_types = [type_map.get(v, "Object") for v in sorted(out_set)]
+                                return_type_str = "Tuple<" + ", ".join(ret_types) + ">"
+
+                            def fmt_math_set(s):
+                                return "{" + html.escape(", ".join(sorted(s))) + "}" if s else "{}"
+
                             # Add instance metadata using the template
                             html_content.append(tmpl_instance_meta.format(
                                 func_id=func_id,
@@ -189,10 +221,14 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 method_qualified=m_info.get("qualified"),
                                 m_start=m_start,
                                 m_end=m_end,
+                                return_type=html.escape(return_type_str),   # NEW
                                 extracted_params=extracted_params_str,
-                                use_set_str=fmt_math_set(use_set),          # NEW
-                                def_set_str=fmt_math_set(def_before_set),   # NEW
-                                in_set_str=fmt_math_set(in_set),            # NEW
+                                use_set_str=fmt_math_set(use_set),          
+                                def_set_str=fmt_math_set(def_before_set),   
+                                in_set_str=fmt_math_set(in_set),            
+                                def_within_str=fmt_math_set(def_within_set), # NEW
+                                use_after_str=fmt_math_set(use_after_set),   # NEW
+                                out_set_str=fmt_math_set(out_set),           # NEW
                                 vr_pre=fmt_set(rw_regions.vr[REG_PRE]),
                                 vr_within=fmt_set(rw_regions.vr[REG_WITHIN]),
                                 vr_post=fmt_set(rw_regions.vr[REG_POST]),
@@ -200,7 +236,6 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str):
                                 vw_within=fmt_set(rw_regions.vw[REG_WITHIN]),
                                 vw_post=fmt_set(rw_regions.vw[REG_POST])
                             ))
-
 
                             # Extract source and color it
                             method_source = parser.text_of(enclosing_record.node)
