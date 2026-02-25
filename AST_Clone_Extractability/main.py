@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from AST_Clone_Extractability.io_nicad import load_nicad, write_output
 from AST_Clone_Extractability.index_methods import FileMethodIndex
 from AST_Clone_Extractability.rw_vars import extract_rw_by_region
-from AST_Clone_Extractability.feasibility import compute_in_out, decide_extractable
+from AST_Clone_Extractability.feasibility import compute_in_out, compute_in_out_types, decide_extractable
 from AST_Clone_Extractability.hazards import detect_cf_hazard_detail
 
 
@@ -41,7 +41,7 @@ def _resolve_enclosing_method(
     Find the *enclosing* method node that contains [clone_start, clone_end].
     Chooses the smallest enclosing method by span.
     Returns:
-      (method_node, resolved_qname, resolved_method_info, resolved_ok)
+      (method_node, resolved_qname, resolved_method_info, resolved_method_record, resolved_ok)
     """
     best_mr = None
     best_q = None
@@ -60,10 +60,10 @@ def _resolve_enclosing_method(
             best_span = span
 
     if best_mr is not None:
-        return best_mr.node, best_q, best_mr.method_info, True
+        return best_mr.node, best_q, best_mr.method_info, best_mr,True
 
     # fallback
-    return parser.root, None, None, False
+    return parser.root, None, None, None, False
 
 
 def _region_ranges(fun_start: int, fun_end: int, clone_start: int, clone_end: int) -> Dict[str, str]:
@@ -105,7 +105,7 @@ def analyze_nicad(
             parser, methods = idx.get(file_path)
 
             # Always resolve the enclosing function by clone range containment
-            method_node, resolved_qname, resolved_mi, resolved_ok = _resolve_enclosing_method(
+            method_node, resolved_qname, resolved_mi, resolved_mr, resolved_ok = _resolve_enclosing_method(
                 parser=parser,
                 methods=methods,
                 clone_start=clone_start,
@@ -121,10 +121,24 @@ def analyze_nicad(
                 # Fallback to clone range only.
                 fun_start, fun_end = clone_start, clone_end
 
+            # Extract enclosing function source code
+            func_code = None
+            if resolved_ok and resolved_mr is not None:
+                # Preferred: use parser helper if available
+                if hasattr(parser, "text_of"):
+                    func_code = parser.text_of(resolved_mr.node)
+                else:
+                    # Fallback: try common field on parser for source bytes
+                    source_bytes = getattr(parser, "source_bytes", None)
+                    if source_bytes is not None:
+                        func_code = source_bytes[resolved_mr.node.start_byte : resolved_mr.node.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
+
             # RW extraction uses the enclosing method_node (so pre/post are within that method scope)
             rw = extract_rw_by_region(parser, method_node, clone_start, clone_end, only_method_scope=True)
 
-            In, Out = compute_in_out(rw)
+            In, Out, InType, OutType = compute_in_out_types(rw)
             cf_hazard, hazard_detail = detect_cf_hazard_detail(method_node, clone_start, clone_end)
             extractable = decide_extractable(In, Out, cf_hazard, P=P, R=R)
 
@@ -151,6 +165,7 @@ def analyze_nicad(
                 "fun_range": f"{fun_start}-{fun_end}",
                 "fun_nlines": (fun_end - fun_start + 1) if fun_end >= fun_start else 0,
                 "resolved_ok": resolved_ok,
+                "func_code": func_code,
             }
 
             # Add explicit region ranges derived from enclosing function range + clone range
@@ -175,7 +190,10 @@ def analyze_nicad(
 
             # feasibility
             new_inst["In"] = sorted(In)
+            new_inst["InType"] = sorted(InType)
             new_inst["Out"] = sorted(Out)
+            # NEW: type sets (may be empty if type info is missing or In/Out empty)
+            new_inst["OutType"] = sorted(OutType)
             new_inst["CFHazard"] = cf_hazard
             new_inst["CFHazard_detail"] = hazard_detail
             new_inst["Extractable"] = extractable
@@ -224,7 +242,7 @@ def main() -> None:
     ap.add_argument("--input", required=True, help="NiCad JSON or JSONL")
     ap.add_argument("--output", required=True, help="Output JSON/JSONL")
     ap.add_argument("--jsonl", action="store_true", help="Write JSONL output")
-    ap.add_argument("--P", type=int, default=7, help="Max allowed parameter count (|In(i)|)")
+    ap.add_argument("--P", type=int, default=None, help="Max allowed parameter count (|In(i)|)")
     ap.add_argument("--R", type=int, default=1, help="Max allowed return count (|Out(i)|). Java default is 1.")
     ap.add_argument("--debug-hazard", action="store_true", help="Print hazard details per clone instance")
     args = ap.parse_args()

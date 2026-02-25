@@ -51,5 +51,23 @@ def compute_in_out(rw: RWRegions) -> (Set[str], Set[str]):
     
     return In, Out
 
+def compute_in_out_types(rw: RWRegions) -> Tuple[Set[str], Set[str], Set[str], Set[str]]:
+    """
+    Convenience helper (does NOT change your feasibility rule):
+      returns (In, Out, InType, OutType)
+
+    Requires rw.var_types (added in rw_vars.py). Unknown types are ignored.
+    """
+    In, Out = compute_in_out(rw)
+
+    var_types = getattr(rw, "var_types", {}) or {}
+    InType = {var_types[v] for v in In if v in var_types}
+    OutType = {var_types[v] for v in Out if v in var_types}
+
+    return In, Out, InType, OutType
+
 def decide_extractable(In: Set[str], Out: Set[str], cf_hazard: bool, P: int, R: int) -> bool:
-    return (len(In) <= P) and (len(Out) <= R) and (not cf_hazard)
+    in_ok = True if P is None else (len(In) <= P)
+    out_ok = (len(Out) <= R)
+
+    return in_ok and out_ok and (not cf_hazard)
