@@ -91,11 +91,13 @@ def _build_type_map(m_info: Dict[str, Any]) -> Dict[str, str]:
     """
     type_map: Dict[str, str] = {}
 
+    # Parse original method parameters (e.g., "Set<String> roles" -> {"roles": "Set<String>"})
     for param_str in m_info.get("parameters", []) or []:
         parts = str(param_str).strip().rsplit(" ", 1)
         if len(parts) == 2:
             type_map[parts[1]] = parts[0]
 
+    # Parse local variables list: (var_type, var_name, line_num)
     for var_type, var_name, _ in m_info.get("local_variables", []) or []:
         type_map[str(var_name)] = str(var_type)
 
@@ -103,7 +105,12 @@ def _build_type_map(m_info: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _derive_def_before(m_info: Dict[str, Any], clone_start: int) -> List[str]:
+    """
+    Def_before(i) = method parameters + locals declared before clone.
+    Returns sorted unique base names.
+    """
     s = set()
+
     for param_str in m_info.get("parameters", []) or []:
         parts = str(param_str).strip().rsplit(" ", 1)
         if len(parts) == 2:
@@ -121,18 +128,38 @@ def _derive_def_before(m_info: Dict[str, Any], clone_start: int) -> List[str]:
 
 
 def _derive_def_within(rw_regions) -> List[str]:
+    """
+    Def_within(i) = variables written within clone (base names).
+    """
     return _base_names_from_with_line(rw_regions.vw.get(REG_WITHIN, set()))
 
 
 def _derive_use_after(rw_regions) -> List[str]:
+    """
+    Use_after(i) = variables read after clone (base names).
+    """
     return _base_names_from_with_line(rw_regions.vr.get(REG_POST, set()))
 
 
 def _derive_use_within(rw_regions) -> List[str]:
+    """
+    Use(i) = variables read within clone (base names).
+    """
     return _base_names_from_with_line(rw_regions.vr.get(REG_WITHIN, set()))
 
 
-def _infer_signature(in_vars: List[str], out_vars: List[str], type_map: Dict[str, str]) -> Tuple[str, str, List[str], List[str]]:
+def _infer_signature(
+    in_vars: List[str],
+    out_vars: List[str],
+    type_map: Dict[str, str],
+) -> Tuple[str, str, List[str], List[str]]:
+    """
+    Returns:
+      return_type_str,
+      extracted_signature_str,
+      in_types,
+      out_types
+    """
     in_types = [type_map.get(v, "Object") for v in in_vars]
 
     if len(out_vars) == 0:
@@ -154,6 +181,11 @@ def _infer_signature(in_vars: List[str], out_vars: List[str], type_map: Dict[str
 
 
 def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output_jsonl: str):
+    """
+    Reads a JSONL file, identifies enclosing methods, writes:
+      1) an HTML visualization
+      2) an augmented JSONL with analysis fields
+    """
     jsonl_file = Path(jsonl_path)
     base_path = Path(base_dir)
 
@@ -161,6 +193,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
         print(f"Error: The file '{jsonl_path}' does not exist.")
         sys.exit(1)
 
+    # Load HTML templates
     tmpl_header = load_template("header.html")
     tmpl_footer = load_template("footer.html")
     tmpl_class_start = load_template("class_start.html")
@@ -175,8 +208,6 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
 
     written_classes = 0
     written_sources = 0
-    dropped_full_functions = 0
-    dropped_classes = 0
 
     with open(jsonl_file, "r", encoding="utf-8") as f_in, open(out_jsonl_path, "w", encoding="utf-8") as f_out:
         for line_num, line in enumerate(f_in, start=1):
@@ -194,14 +225,20 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
 
             print(f"--- Processing Clone Class ID: {class_id} ---")
 
+            # HTML: start class block
+            html_content.append(
+                tmpl_class_start.format(
+                    class_id=class_id,
+                    instance_count=len(sources),
+                )
+            )
+
+            # JSONL: build augmented class record
             augmented_class = dict(clone_class)
             augmented_sources: List[Dict[str, Any]] = []
-            
-            # Buffer HTML elements so we can drop the class completely if nclones falls below 2
-            class_html_buffer = []
 
             for source in sources:
-                src_aug = dict(source)
+                src_aug = dict(source)  # keep original fields
                 rel_file = source.get("file")
                 range_str = source.get("range")
                 func_id = source.get("func_id")
@@ -220,9 +257,12 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                 full_file_path = base_path / rel_file
 
                 if not full_file_path.is_file():
-                    class_html_buffer.append(
+                    html_content.append(
                         tmpl_instance_error.format(
-                            func_id=func_id, rel_file=rel_file, range_str=range_str, error_msg="File not found on disk."
+                            func_id=func_id,
+                            rel_file=rel_file,
+                            range_str=range_str,
+                            error_msg="File not found on disk.",
                         )
                     )
                     src_aug["analysis_error"] = "File not found on disk."
@@ -234,9 +274,12 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                     enclosing_record = find_enclosing_method(methods, clone_start, clone_end)
 
                     if not enclosing_record:
-                        class_html_buffer.append(
+                        html_content.append(
                             tmpl_instance_error.format(
-                                func_id=func_id, rel_file=rel_file, range_str=range_str, error_msg="No enclosing method found bounds."
+                                func_id=func_id,
+                                rel_file=rel_file,
+                                range_str=range_str,
+                                error_msg="No enclosing method found bounds.",
                             )
                         )
                         src_aug["analysis_error"] = "No enclosing method found bounds."
@@ -247,33 +290,35 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                     m_start = int(m_info.get("start_line"))
                     m_end = int(m_info.get("end_line"))
 
-                    # --- FILTER LOGIC: Check full function clone ---
-                    is_full = (clone_end == m_end) and ((clone_start - m_start) <= 3)
-                    
-                    if is_full:
-                        print(f"  > Dropped {func_id} (is_full_function_clone=True)")
-                        dropped_full_functions += 1
-                        continue # Skip appending this source entirely
-
-                    src_aug["is_full_function_clone"] = False
-
                     # --- Run Data-Flow Analysis ---
                     rw_regions = extract_rw_by_region(
-                        parser, enclosing_record.node, clone_start, clone_end, only_method_scope=True
+                        parser,
+                        enclosing_record.node,
+                        clone_start,
+                        clone_end,
+                        only_method_scope=True,
                     )
 
+                    # --- Build Type Lookup ---
                     type_map = _build_type_map(m_info)
 
-                    use_set = _derive_use_within(rw_regions)
-                    def_before_set = _derive_def_before(m_info, clone_start)
-                    in_set = sorted(set(use_set).intersection(def_before_set))
+                    # --- Derivation Sets ---
+                    use_set = _derive_use_within(rw_regions)  # Use(i)
+                    def_before_set = _derive_def_before(m_info, clone_start)  # Defbefore(i)
+                    in_set = sorted(set(use_set).intersection(def_before_set))  # In(i)
 
-                    def_within_set = _derive_def_within(rw_regions)
-                    use_after_set = _derive_use_after(rw_regions)
-                    out_set = sorted(set(def_within_set).intersection(use_after_set))
+                    def_within_set = _derive_def_within(rw_regions)  # Defwithin(i)
+                    use_after_set = _derive_use_after(rw_regions)  # Useafter(i)
+                    out_set = sorted(set(def_within_set).intersection(use_after_set))  # Out(i)
 
-                    return_type_str, extracted_sig, in_types, out_types = _infer_signature(in_set, out_set, type_map)
+                    # --- Signature & types ---
+                    return_type_str, extracted_sig, in_types, out_types = _infer_signature(
+                        in_vars=in_set,
+                        out_vars=out_set,
+                        type_map=type_map,
+                    )
 
+                    # --- Region ranges ---
                     pre_rng = _range_or_none(m_start, clone_start - 1)
                     within_rng = _range_or_none(clone_start, clone_end)
                     post_rng = _range_or_none(clone_end + 1, m_end)
@@ -284,8 +329,20 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                         "CloneRegion_post": post_rng,
                     }
 
+                    # --- CORRECTED IS_FULL_FUNCTION_CLONE LOGIC ---
+                    is_full = (clone_end == m_end) and ((clone_start - m_start) <= 3)
+                    src_aug["is_full_function_clone"] = is_full
+
+                    # --- Enclosing function code ---
                     method_source = parser.text_of(enclosing_record.node)
-                    method_source = re.sub(r'^\s*@\w+(?:\([^)]*\))?\s*$', '', method_source, flags=re.MULTILINE)
+
+                    # --- Remove annotation lines but do NOT collapse blank lines ---
+                    method_source = re.sub(
+                        r'^\s*@\w+(?:\([^)]*\))?\s*$',
+                        '',
+                        method_source,
+                        flags=re.MULTILINE
+                    )
 
                     src_aug["enclosing_function"] = {
                         "qualified_name": m_info.get("qualified") or m_info.get("qualified_name") or m_info.get("name"),
@@ -294,6 +351,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                         "func_code": method_source,
                     }
 
+                    # --- Variables read/written grouped ---
                     vr_pre = _sorted_list(rw_regions.vr.get(REG_PRE, set()))
                     vr_within = _sorted_list(rw_regions.vr.get(REG_WITHIN, set()))
                     vr_post = _sorted_list(rw_regions.vr.get(REG_POST, set()))
@@ -312,6 +370,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                         "Post": vw_post if vw_post else None,
                     }
 
+                    # --- CORRECTED NESTED STRUCTURE ---
                     src_aug["In"] = {
                         "In(i)": in_set,
                         "InType": {
@@ -327,30 +386,49 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                         "Useafter(i)": use_after_set,
                     }
 
+                    # Remove old keys if present
                     src_aug.pop("InType", None)
                     src_aug.pop("OutType", None)
 
                     src_aug["Extracted Signature"] = extracted_sig
                     src_aug["ReturnType"] = return_type_str
 
-                    # --- HTML emission ---
-                    extracted_params_str = html.escape(", ".join([f"{type_map.get(v, 'Object')} {v}" for v in in_set]))
+                    # --------------------------
+                    # HTML emission
+                    # --------------------------
+                    extracted_params_str = html.escape(
+                        ", ".join([f"{type_map.get(v, 'Object')} {v}" for v in in_set])
+                    )
 
-                    class_html_buffer.append(
+                    html_content.append(
                         tmpl_instance_meta.format(
-                            func_id=func_id, rel_file=rel_file, range_str=range_str,
-                            method_qualified=m_info.get("qualified"), m_start=m_start, m_end=m_end,
-                            return_type=html.escape(return_type_str), extracted_params=extracted_params_str,
-                            use_set_str=fmt_math_set_for_html(set(use_set)), def_set_str=fmt_math_set_for_html(set(def_before_set)),
-                            in_set_str=fmt_math_set_for_html(set(in_set)), def_within_str=fmt_math_set_for_html(set(def_within_set)),
-                            use_after_str=fmt_math_set_for_html(set(use_after_set)), out_set_str=fmt_math_set_for_html(set(out_set)),
-                            vr_pre=fmt_set(set(vr_pre)), vr_within=fmt_set(set(vr_within)), vr_post=fmt_set(set(vr_post)),
-                            vw_pre=fmt_set(set(vw_pre)), vw_within=fmt_set(set(vw_within)), vw_post=fmt_set(set(vw_post)),
+                            func_id=func_id,
+                            rel_file=rel_file,
+                            range_str=range_str,
+                            method_qualified=m_info.get("qualified"),
+                            m_start=m_start,
+                            m_end=m_end,
+                            return_type=html.escape(return_type_str),
+                            extracted_params=extracted_params_str,
+                            use_set_str=fmt_math_set_for_html(set(use_set)),
+                            def_set_str=fmt_math_set_for_html(set(def_before_set)),
+                            in_set_str=fmt_math_set_for_html(set(in_set)),
+                            def_within_str=fmt_math_set_for_html(set(def_within_set)),
+                            use_after_str=fmt_math_set_for_html(set(use_after_set)),
+                            out_set_str=fmt_math_set_for_html(set(out_set)),
+                            vr_pre=fmt_set(set(vr_pre)),
+                            vr_within=fmt_set(set(vr_within)),
+                            vr_post=fmt_set(set(vr_post)),
+                            vw_pre=fmt_set(set(vw_pre)),
+                            vw_within=fmt_set(set(vw_within)),
+                            vw_post=fmt_set(set(vw_post)),
                         )
                     )
 
+                    # Render and highlight Use(i) within clone
                     source_lines = method_source.split("\n")
                     in_signature = True
+
                     use_set_for_highlight = set(use_set)
 
                     for i, raw_line in enumerate(source_lines):
@@ -363,7 +441,10 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
 
                             for var in sorted(use_set_for_highlight, key=len, reverse=True):
                                 pattern = rf"\b({re.escape(var)})\b"
-                                highlight_tag = r'<span style="background-color: #ffeb3b; color: #b30000; border-radius: 2px; padding: 0 2px;">\1</span>'
+                                highlight_tag = (
+                                    r'<span style="background-color: #ffeb3b; color: #b30000; '
+                                    r'border-radius: 2px; padding: 0 2px;">\1</span>'
+                                )
                                 escaped_line = re.sub(pattern, highlight_tag, escaped_line)
 
                         elif current_line_num < clone_start:
@@ -376,50 +457,46 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                         else:
                             line_class = "after-clone"
 
-                        class_html_buffer.append(f'<span class="line-number">{current_line_num}</span><span class="{line_class}">{escaped_line}</span>\n')
+                        html_content.append(
+                            f'<span class="line-number">{current_line_num}</span>'
+                            f'<span class="{line_class}">{escaped_line}</span>\n'
+                        )
 
-                    class_html_buffer.append("</code></pre>\n</div>\n")
+                    html_content.append("</code></pre>\n</div>\n")
+
+                    print(f"  > Generated HTML + JSONL analysis for {func_id} in {m_info.get('qualified')}")
                     augmented_sources.append(src_aug)
                     written_sources += 1
 
                 except Exception as e:
-                    class_html_buffer.append(
-                        tmpl_instance_error.format(func_id=func_id, rel_file=rel_file, range_str=range_str, error_msg=f"Error parsing Java file: {e}")
+                    html_content.append(
+                        tmpl_instance_error.format(
+                            func_id=func_id,
+                            rel_file=rel_file,
+                            range_str=range_str,
+                            error_msg=f"Error parsing Java file: {e}",
+                        )
                     )
                     src_aug["analysis_error"] = f"Error parsing Java file: {e}"
                     augmented_sources.append(src_aug)
 
-            # --- FILTER LOGIC: Drop Class if nclones < 2 ---
-            if len(augmented_sources) < 2:
-                print(f"  > Dropping Class {class_id} (nclones < 2 after filtering)")
-                dropped_classes += 1
-                continue
-
-            # Update nclones to the new filtered count
-            augmented_class["sources"] = augmented_sources
-            augmented_class["nclones"] = len(augmented_sources)
-
-            # --- Commit HTML & JSONL ---
-            html_content.append(tmpl_class_start.format(class_id=class_id, instance_count=len(augmented_sources)))
-            html_content.extend(class_html_buffer)
+            # close HTML class block
             html_content.append("</div>\n")
-            
+
+            augmented_class["sources"] = augmented_sources
             f_out.write(json.dumps(augmented_class, ensure_ascii=False) + "\n")
             written_classes += 1
 
     html_content.append(tmpl_footer)
 
+    # Write HTML output
     output_path = Path(output_html)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("".join(html_content), encoding="utf-8")
 
-    print("\n--- Filtering & Generation Summary ---")
-    print(f"Full-function clone sources dropped: {dropped_full_functions}")
-    print(f"Classes dropped (nclones < 2):       {dropped_classes}")
-    print(f"Classes written successfully:        {written_classes}")
-    print(f"Sources analyzed successfully:       {written_sources}")
     print(f"\nSuccessfully wrote visualization to: {output_path.absolute()}")
     print(f"Successfully wrote augmented JSONL to: {out_jsonl_path.absolute()}")
+    print(f"Stats: classes={written_classes}, sources_analyzed={written_sources}")
 
 
 def main():
@@ -427,10 +504,34 @@ def main():
         description="Find enclosing Java methods for clone blocks, visualize in HTML, and export augmented JSONL."
     )
 
-    parser.add_argument("--jsonl", type=str, required=True, help="Path to the input JSONL file.")
-    parser.add_argument("--base-dir", type=str, default=".", help="Base directory to resolve the relative file paths.")
-    parser.add_argument("--output", type=str, default="clone_visualization.html", help="Output HTML file name.")
-    parser.add_argument("--out-jsonl", dest="out_jsonl", type=str, default=None, help="Output augmented JSONL file name.")
+    parser.add_argument(
+        "--jsonl",
+        type=str,
+        required=True,
+        help="Path to the input JSONL file."
+    )
+
+    parser.add_argument(
+        "--base-dir",
+        type=str,
+        default=".",
+        help="Base directory to resolve the relative file paths."
+    )
+
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="clone_visualization.html",
+        help="Output HTML file name."
+    )
+
+    parser.add_argument(
+        "--out-jsonl",
+        dest="out_jsonl",
+        type=str,
+        default=None,
+        help="Output augmented JSONL file name (default: derived from --output).",
+    )
 
     args = parser.parse_args()
 
@@ -439,6 +540,7 @@ def main():
         out_jsonl = str(Path(args.output).with_suffix(".jsonl"))
 
     process_clone_jsonl(args.jsonl, args.base_dir, args.output, out_jsonl)
+
 
 if __name__ == "__main__":
     main()

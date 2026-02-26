@@ -49,24 +49,17 @@ find_jsonl_for_system() {
   fi
 
   # Fallback: try to find exactly one matching JSONL
-  local -a matches=()
-  while IFS= read -r f; do
-    matches+=("$f")
-  done < <(find "$JSONL_ROOT" -maxdepth 1 -type f -name "*${system}*.jsonl" | sort)
-
-  if [[ "${#matches[@]}" -eq 1 ]]; then
-    echo "${matches[0]}"
+  # This prevents "ant" from matching "ant-ivy".
+  local exact
+  exact="$(find "$JSONL_ROOT" -maxdepth 1 -type f -name "${system}_extractability.jsonl" | head -n 1 || true)"
+  if [[ -n "$exact" && -f "$exact" ]]; then
+    echo "$exact"
     return 0
   fi
 
-  if [[ "${#matches[@]}" -eq 0 ]]; then
-    echo ""
-    return 2
-  fi
-
-  # ambiguous
-  printf '%s\n' "${matches[@]}" 1>&2
-  return 3
+  # If not found, return "not found"
+  echo ""
+  return 2
 }
 
 total_jobs=0

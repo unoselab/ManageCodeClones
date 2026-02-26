@@ -28,10 +28,10 @@ AST_Clone_Extractability/
 ├── java_treesitter_parser.py       # Tree-sitter Java parser wrapper
 ├── java_class_method_visitor.py    # Method AST visitor
 ├── util_ast.py                     # AST utilities
-│
-├── input/                          # NiCad input files
-├── output/                         # Generated results
-└── systems/                        # Analyzed source code (NiCad systems)
+├── input/java-functions/           # Input NiCad JSONL files
+├── output/java-functions/          # Output extractability results
+├── systems/                        # Analyzed source code (NiCad systems)
+└── run_all_extractability.sh       # Batch runner script
 ```
 
 ---
@@ -54,6 +54,7 @@ For each clone instance:
 
    * `In(i)`  → variables required as parameters
    * `Out(i)` → variables that must be returned
+   
 5. Detect:
 
    * Control-flow hazards (`return`, `break`, `continue`, `throw`, `yield`)
@@ -98,6 +99,29 @@ This saves all hazard diagnostics into:
 
 ```
 output/nicad_feasibility_hazard.log
+```
+### Running Batch Over All Repositories
+
+Use the provided script:
+
+```bash
+bash run_all_extractability.sh
+```
+
+It will:
+
+* Scan `input/java-functions/*-sim0.7`
+* Find matching NiCad JSONL
+* Produce:
+
+```
+output/java-functions/<repo>_extractability.jsonl
+```
+
+* Log everything to:
+
+```
+output/java-functions/ALL_repos_Extractability.log
 ```
 ### Parameters
 
