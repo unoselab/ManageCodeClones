@@ -2,6 +2,7 @@ from typing import Iterable, Optional, List
 from typing import Set, Dict, Tuple
 from dataclasses import dataclass
 from java_treesitter_parser import JavaTreeSitterParser
+import re
 
 _METHOD_NODES = {
     "method_declaration", "constructor_declaration", "compact_constructor_declaration",
@@ -162,6 +163,41 @@ def collect_local_vars(parser, method_node) -> List[Tuple[str, str, int]]:
 
     return locals_list
 
+def collect_class_fields(parser, class_node) -> List[Tuple[str, str]]:
+    """
+    Extract all class-level field types and names,
+    ignoring loggers and standard ALL_CAPS constants.
+    """
+    fields = []
+    if not class_node:
+        return fields
+        
+    body = class_node.child_by_field_name("body")
+    if not body:
+        return fields
+        
+    for child in body.children:
+        if child.type == "field_declaration":
+            # Extract the type (e.g., "Queue<Transformer>", "Connector", "Map<String, Object>")
+            type_node = child.child_by_field_name("type")
+            field_type = parser.text_of(type_node).strip() if type_node else "Object"
+            
+            for sub in child.children:
+                if sub.type == "variable_declarator":
+                    name_node = sub.child_by_field_name("name")
+                    if name_node:
+                        field_name = parser.text_of(name_node).strip()
+                        
+                        # --- Heuristic Filters ---
+                        if field_name.upper() in ("LOG", "LOGGER"):
+                            continue
+                        if re.fullmatch(r"[A-Z0-9_]+", field_name):
+                            continue
+                            
+                        # Append both type and name
+                        fields.append((field_type, field_name))
+                        
+    return fields
 
 # --- Constants for Data-Flow Regions ---
 REG_PRE = "PRE"
@@ -173,6 +209,8 @@ class RWRegions:
     """Stores the read (vr) and write (vw) sets for local variables across regions."""
     locals_in_method: Set[str]
     params_in_method: Set[str]
+    fields_in_class: Set[str]  # <--- NEW: Track class fields as well
+    field_types: Dict[str, str]  # <--- ADD THIS
     vr: Dict[str, Set[str]]
     vw: Dict[str, Set[str]]
 
@@ -188,7 +226,7 @@ def _region_for_line(line: int, clone_start: int, clone_end: int) -> str:
 def classify_identifier_rw(node) -> Tuple[bool, bool]:
     """
     Determines if an identifier node is being Read (is_r) and/or Written (is_w).
-    Returns a tuple: (is_r, is_w)
+    Handles direct assignments, arrays (arr[i]=1), and fields (obj.x=1).
     """
     is_r = True
     is_w = False
@@ -197,46 +235,47 @@ def classify_identifier_rw(node) -> Tuple[bool, bool]:
     if not parent:
         return (is_r, is_w)
 
-    # 1. Assignment Expression (e.g., x = 5, x += 2)
-    if parent.type == "assignment_expression":
-        left_node = parent.child_by_field_name("left")
-        if left_node == node:
-            is_w = True
-            operator_node = parent.child_by_field_name("operator")
-            # If it's a simple assignment '=', it's only a write.
-            # If it's a compound assignment (e.g., '+=', '-='), it is a read AND a write.
-            if operator_node and operator_node.type == "=":
-                is_r = False
+    # 1. Fast checks for declarations and special bindings (Pure Writes)
+    if parent.type == "variable_declarator" and parent.child_by_field_name("name") == node:
+        return (False, True) 
+    if parent.type == "enhanced_for_statement" and parent.child_by_field_name("name") == node:
+        return (False, True)
+    if parent.type == "catch_formal_parameter" and parent.child_by_field_name("name") == node:
+        return (False, True)
 
-    # 2. Variable Declaration (e.g., int x = 5;)
-    elif parent.type == "variable_declarator":
-        name_node = parent.child_by_field_name("name")
-        if name_node == node:
-            is_w = True
-            is_r = False  # Initialization is considered a pure write
+    # 2. Traverse upward through accessors to see if this node is the target of a mutation
+    cur = node
+    is_pure_assign = False
+    
+    while cur.parent and cur.parent.type in ("field_access", "array_access"):
+        p = cur.parent
+        if p.type == "array_access" and p.child_by_field_name("index") == cur:
+            break  # The index itself is just being read, stop traversing
+        if p.type == "field_access" and p.child_by_field_name("object") == cur:
+            break  # The base object is just being read, stop traversing
+        cur = p
 
-    # 3. Update Expression (e.g., x++, --y)
-    elif parent.type == "update_expression":
-        # Increment/decrement operations read the value, modify it, and write it back
-        is_w = True
-        is_r = True
-
-    # 4. Enhanced For Statement (e.g., for(String s : list))
-    elif parent.type == "enhanced_for_statement":
-        name_node = parent.child_by_field_name("name")
-        if name_node == node:
+    # 3. Check if the top-level accessor we found is being mutated
+    if cur.parent:
+        if cur.parent.type == "assignment_expression" and cur.parent.child_by_field_name("left") == cur:
             is_w = True
-            is_r = False  # The loop variable is being bound/written to
-
-    # 5. Catch Clause (e.g., catch(Exception e))
-    elif parent.type == "catch_formal_parameter":
-        name_node = parent.child_by_field_name("name")
-        if name_node == node:
+            op = cur.parent.child_by_field_name("operator")
+            if op and op.type == "=":
+                is_pure_assign = True
+        elif cur.parent.type == "update_expression":
             is_w = True
-            is_r = False  # The exception variable is bound here
+
+    # 4. Final Read/Write resolution
+    if is_w:
+        # If it is a pure assignment directly to the identifier (e.g., x = 5), it's a pure write.
+        # If it is an array/field mutation (e.g., arr[i] = 5), the base identifier is technically 
+        # read to resolve the reference in memory, then mutated.
+        if is_pure_assign and cur == node:
+            is_r = False
+        else:
+            is_r = True
 
     return (is_r, is_w)
-
 
 def extract_rw_by_region(
     parser,
@@ -248,12 +287,29 @@ def extract_rw_by_region(
     """
     Compute variable read/write sets (V_r, V_w) for pre/within/post clone regions.
     """
-    params = set(collect_params(parser, method_node))
+    # 1. Clean Method Parameters
+    raw_params = collect_params(parser, method_node)
+    params = set()
+    for p in raw_params:
+        parts = str(p).strip().rsplit(" ", 1)
+        if len(parts) == 2:
+            params.add(parts[1])
+        elif len(parts) == 1:
+            params.add(parts[0])
+
+    # 2. Local Variables
     raw_locals = collect_local_vars(parser, method_node)
+    locals_ = {var_name for _, var_name, _ in raw_locals}
+
+    # 3. Class Fields
+    cls_node = enclosing_class_node(method_node)
+    raw_fields = collect_class_fields(parser, cls_node)
     
-    # Extract just the names to build our scope set
-    locals_ = {var_name for var_type, var_name, line_num in raw_locals}
-    scope_vars = params | locals_
+    fields = {f_name for f_type, f_name in raw_fields}
+    field_type_map = {f_name: f_type for f_type, f_name in raw_fields}
+    
+    # 4. Build the master scope set
+    scope_vars = params | locals_ | fields
 
     vr = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
     vw = {REG_PRE: set(), REG_WITHIN: set(), REG_POST: set()}
@@ -261,7 +317,8 @@ def extract_rw_by_region(
     locally_defined_within: Set[str] = set()
 
     for n in iter_descendants(method_node):
-        if n.type != "identifier":
+        # NEW: Must include field_identifier to catch object properties and "this.x"
+        if n.type not in ("identifier", "field_identifier"):
             continue
 
         name = parser.text_of(n)
@@ -272,7 +329,6 @@ def extract_rw_by_region(
         region = _region_for_line(line, clone_start, clone_end)
         is_r, is_w = classify_identifier_rw(n)
         
-        # Format the variable name to include its exact line number
         var_with_line = f"{name} (Line {line})"
 
         if region == REG_WITHIN:
@@ -281,7 +337,7 @@ def extract_rw_by_region(
             
             if is_w:
                 vw[region].add(var_with_line)
-                locally_defined_within.add(name) # Keep tracking just the name for logic!
+                locally_defined_within.add(name)
         else:
             if is_r: vr[region].add(var_with_line)
             if is_w: vw[region].add(var_with_line)
@@ -289,10 +345,11 @@ def extract_rw_by_region(
     return RWRegions(
         locals_in_method=locals_,
         params_in_method=params,
+        fields_in_class=fields,    # <--- ADD THIS
+        field_types=field_type_map, # <--- ADD THIS
         vr=vr,
         vw=vw,
     )
-
 
 def return_type(parser: JavaTreeSitterParser, decl) -> Optional[str]:
     """Return the return type of a method, or None if it is a constructor."""

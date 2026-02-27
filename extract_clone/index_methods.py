@@ -22,11 +22,12 @@ class _MethodIndexer(JavaClassMethodVisitor):
 
     def visit_method(self, class_name, method_info, node):
         q = method_info.get("qualified")
-        # start_line = method_info.get("start_line")
-        # end_line = method_info.get("end_line")
-        # print(f"\nstart line: {start_line}, end line: {end_line}")
-        if q:
-            self.by_qualified[q] = MethodRecord(class_name=class_name, method_info=method_info, node=node)
+        start_line = method_info.get("start_line")
+        
+        if q and start_line:
+            # Create a unique key to prevent overloaded methods from overwriting each other
+            unique_key = f"{q}_{start_line}"
+            self.by_qualified[unique_key] = MethodRecord(class_name=class_name, method_info=method_info, node=node)
 
 
 class FileMethodIndex:
