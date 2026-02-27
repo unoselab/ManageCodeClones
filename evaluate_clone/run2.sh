@@ -12,13 +12,18 @@ IFS=',' read -ra MODEL_ARRAY <<< "$MODELS"
 
 for MODEL in "${MODEL_ARRAY[@]}"; do
     JSONL_FILE="${OUTPUT_DIR}/${MODEL}/rcp_scores.jsonl"
-    CHART_FILE="./rcp_delta_chart_${MODEL}.png"
+    DELTA_CHART="rcp_delta_chart_${MODEL}.png"
+    BOX_PLOT="rcp_boxplot_${MODEL}.png"
     
     if [ -f "$JSONL_FILE" ]; then
-        echo "Generating chart for $MODEL..."
-        python 2_plot_delta.py --rcp "$JSONL_FILE" --output "$CHART_FILE"
+        echo "Generating charts for $MODEL..."
+        python 2_plot_delta.py --rcp "$JSONL_FILE" --output "$DELTA_CHART"
+        python 4_plot_boxplot.py --rcp "$JSONL_FILE" --output "$BOX_PLOT"
     fi
 done
+
+
+
 
 echo " "
 echo "** Pipeline finished! All reports and charts are in $OUTPUT_DIR"
