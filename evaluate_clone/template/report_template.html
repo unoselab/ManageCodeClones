@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Clone Detection Error Analysis</title>
+    <title>Refactoring Compatibility Penalty (RCP) Analysis</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
         .summary-box { background-color: #f8f9fa; padding: 15px; border: 1px solid #ddd; border-radius: 5px; width: 600px; margin-bottom: 20px; }
@@ -15,7 +15,7 @@
     </style>
 </head>
 <body>
-    <h1>Clone Detection Error Analysis ($stage Adaptation)</h1>
+    <h1>Refactoring Compatibility Penalty (RCP) Analysis ($stage Adaptation)</h1>
     <p><strong>Model:</strong> $model | <strong>Input:</strong> $input_filename | <strong>Dataset Size:</strong> $total_pairs pairs</p>
 
     <div class="summary-box">
@@ -37,7 +37,7 @@
             <li><strong>Precision:</strong> TP / (TP + FP) = $tp / ($tp + $fp) = <strong>$precision</strong></li>
             <li><strong>Recall:</strong> TP / (TP + FN) = $tp / ($tp + $fn) = <strong>$recall</strong></li>
             <li><strong>F1-Score:</strong> 2 &times; (P &times; R) / (P + R) = <strong>$f1_score</strong></li>
-            <li><strong>Penalty Score:</strong> Total Penalty = <strong>$total_penalty</strong> (Average: $avg_penalty per pair)</li>
+            <li><strong>Refactoring Compatibility Penalty (RCP) Score:</strong> Total Penalty = <strong>$total_penalty</strong> (Average: $avg_penalty per pair)</li>
         </ul>
     </div>
 

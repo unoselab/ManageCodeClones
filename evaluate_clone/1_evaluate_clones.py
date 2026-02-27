@@ -1,6 +1,7 @@
 import argparse
 import pandas as pd
 import sys
+import json
 from pathlib import Path
 from string import Template
 
@@ -13,22 +14,16 @@ def get_ground_truth(row):
         return 0
 
 def compute_penalties(row):
-    """
-    Computes penalty scores matching the Excel sheet logic.
-    """
     p_detect = 0
     p_in = 0
     p_out = 0
     p_intype = 0
     p_outtype = 0
 
-    # Rule 1: False Positive or False Negative
     if row['ground_truth'] != row['clone_predict']:
         p_detect = -1
         
-    # Rules 2-5: Only evaluate mapping if the model predicted a clone
     if row['clone_predict'] == 1:
-        # Cast to string to safely handle potential NaN (empty) values in the CSV
         if str(row['pair_left_in']) != str(row['pair_right_in']):
             p_in = -1
         if str(row['pair_left_out']) != str(row['pair_right_out']):
@@ -48,26 +43,20 @@ def load_template(template_name: str) -> str:
         sys.exit(1)
     return path.read_text(encoding="utf-8")
 
-def main():
-    parser = argparse.ArgumentParser(description="Calculate metrics and generate an HTML error report.")
-    parser.add_argument("--input", type=str, required=True)
-    args = parser.parse_args()
-    input_path = Path(args.input)
-
+def process_file(input_path: Path, template: Template, base_output_dir: Path):
+    """
+    Processes a CSV file, generates HTML in the model's subfolder, and returns RCP metrics.
+    """
     try:
         df = pd.read_csv(input_path, sep=None, engine='python')
     except Exception as e:
-        print(f"Error reading file: {e}")
-        sys.exit(1)
+        print(f"Error reading file {input_path.name}: {e}")
+        return None
 
-    # Calculate GT and Penalties
     df['ground_truth'] = df.apply(get_ground_truth, axis=1)
-    
-    # Apply individual penalties to distinct columns
     penalty_cols = ['P_Detect', 'P_In', 'P_Out', 'P_InType', 'P_OutType', 'Total_Penalty']
     df[penalty_cols] = df.apply(compute_penalties, axis=1)
 
-    # Standard Metrics
     TP = len(df[(df['ground_truth'] == 1) & (df['clone_predict'] == 1)])
     FP_df = df[(df['ground_truth'] == 0) & (df['clone_predict'] == 1)]
     FN_df = df[(df['ground_truth'] == 1) & (df['clone_predict'] == 0)]
@@ -81,25 +70,37 @@ def main():
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     
     overall_penalty = df['Total_Penalty'].sum()
+    total_pairs = len(df)
     
-    # Calculate average penalty based on ACTUAL clones, avoiding dilution from True Negatives
     actual_clones = len(df[df['ground_truth'] == 1])
     avg_penalty = overall_penalty / actual_clones if actual_clones > 0 else 0.0
 
     print(f"\n=== Evaluation Results for: {input_path.name} ===")
+    print(f"Dataset Size: {total_pairs} pairs evaluated")
     print(f"TP: {TP} | FP: {FP} | TN: {TN} | FN: {FN}")
     print(f"Total Penalty: {overall_penalty} (Average per true clone: {avg_penalty:.2f})")
 
-    # Generate HTML
     stage = "unknown"
     if "before" in str(input_path).lower(): stage = "before"
     elif "after" in str(input_path).lower(): stage = "after"
         
+    # Extract the model name and create its specific output subdirectory
     model = input_path.parent.name
-    file_stem = input_path.stem[5:] if input_path.stem.startswith("pred_") else input_path.stem
-    html_report_path = Path.cwd() / f"report_{stage}_{model}_{file_stem}.html"
+    model_output_dir = base_output_dir / model
+    model_output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Choose columns to display in the HTML tables
+    # Extract the subject (project name) from the filename
+    file_stem = input_path.stem
+    if file_stem.startswith("pred_"):
+        subject = file_stem[5:].split('_')[0]
+        file_stem_clean = file_stem[5:]
+    else:
+        subject = file_stem.split('_')[0]
+        file_stem_clean = file_stem
+        
+    # Save the HTML report directly into the model's subdirectory
+    html_report_path = model_output_dir / f"report_{stage}_{model}_{file_stem_clean}.html"
+    
     display_cols = [
         'pair_left_func', 'pair_right_func', 'clone_predict', 'ground_truth', 
         'P_Detect', 'P_In', 'P_Out', 'P_InType', 'P_OutType', 'Total_Penalty'
@@ -108,13 +109,11 @@ def main():
     fp_html = FP_df[display_cols].to_html(index=False, border=1, classes="data-table") if not FP_df.empty else "<p><i>No False Positives found!</i></p>"
     fn_html = FN_df[display_cols].to_html(index=False, border=1, classes="data-table") if not FN_df.empty else "<p><i>No False Negatives found!</i></p>"
     
-    html_template_str = load_template("report_template.html")
-    template = Template(html_template_str)
-    
     html_content = template.safe_substitute(
         stage=stage.capitalize(),
         model=model,
         input_filename=input_path.name,
+        total_pairs=total_pairs,
         tp=TP, fp=FP, tn=TN, fn=FN,
         precision=f"{precision:.4f}",
         recall=f"{recall:.4f}",
@@ -127,7 +126,77 @@ def main():
     
     with open(html_report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"--> Saved Refactoring Compatibility Penalty (RCP) Report to: {html_report_path}\n")
+    print(f"--> Saved Refactoring Compatibility Penalty (RCP) Report to: {html_report_path}")
+
+    return {
+        "llm": model,
+        "subject": subject,
+        "adapt": stage,
+        "total": int(overall_penalty),
+        "avg": round(float(avg_penalty), 2)
+    }
+
+def main():
+    parser = argparse.ArgumentParser(description="Calculate metrics and generate HTML error reports.")
+    parser.add_argument("--input", type=str, help="Path to a single CSV/TSV file.")
+    parser.add_argument("--input-dir", type=str, help="Path to a directory containing multiple CSV files.")
+    parser.add_argument("--output", type=str, required=True, help="Base directory to save the HTML reports and JSONL file.")
+    
+    args = parser.parse_args()
+
+    if not args.input and not args.input_dir:
+        print("Error: You must provide either --input (for a single file) or --input-dir (for a folder).")
+        sys.exit(1)
+
+    # Ensure base output directory exists
+    base_output_dir = Path(args.output)
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    html_template_str = load_template("report_template.html")
+    template = Template(html_template_str)
+
+    results = []
+
+    if args.input:
+        input_path = Path(args.input)
+        if input_path.is_file():
+            res = process_file(input_path, template, base_output_dir)
+            if res:
+                results.append(res)
+        else:
+            print(f"Error: Input file '{args.input}' not found.")
+            
+    if args.input_dir:
+        dir_path = Path(args.input_dir)
+        if dir_path.is_dir():
+            csv_files = list(dir_path.glob("*.csv"))
+            if not csv_files:
+                print(f"Warning: No CSV files found in directory '{args.input_dir}'.")
+            
+            for csv_file in csv_files:
+                res = process_file(csv_file, template, base_output_dir)
+                if res:
+                    results.append(res)
+        else:
+            print(f"Error: Directory '{args.input_dir}' not found.")
+
+    # Save collected results to JSONL, grouping by model
+    if results:
+        # Get unique models processed in this run
+        models = set(r["llm"] for r in results)
+        
+        for m in models:
+            model_results = [r for r in results if r["llm"] == m]
+            model_dir = base_output_dir / m
+            model_dir.mkdir(parents=True, exist_ok=True)
+            
+            jsonl_output_path = model_dir / "rcp_scores.jsonl"
+            
+            with open(jsonl_output_path, "a", encoding="utf-8") as f:
+                for r in model_results:
+                    f.write(json.dumps(r) + "\n")
+                    
+            print(f"\n--> Appended {len(model_results)} RCP scores to: {jsonl_output_path}")
 
 if __name__ == "__main__":
     main()
