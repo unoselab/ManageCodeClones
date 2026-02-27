@@ -6,6 +6,43 @@ This project provides a robust pipeline and HTML-based visualization dashboard f
 
 Given a JSONL file of clone classes and their line ranges, this tool uses `tree-sitter-java` to locate the enclosing methods, track variable reads/writes, and dynamically synthesize the exact method signature required to extract the clone. It outputs both a visual HTML proof of the refactoring and a data-rich JSONL file for downstream machine learning tasks.
 
+# AST Clone Extractability Dashboard & Pipeline
+
+This project provides a robust pipeline and HTML-based visualization dashboard for analyzing the **extractability** of code clones in Java. By parsing the Abstract Syntax Tree (AST) and performing localized Data-Flow Analysis, the tool mathematically proves whether a code clone can be safely refactored using the **Extract Method** technique, generating a highly accurate, augmented JSONL dataset ready for LLM training.
+
+## Overview
+
+Given a JSONL file of clone classes and their line ranges, this tool uses `tree-sitter-java` to locate the enclosing methods, track variable reads/writes, and dynamically synthesize the exact method signature required to extract the clone. It outputs both a visual HTML proof of the refactoring and a data-rich JSONL file for downstream machine learning tasks.
+
+## Directory Structure
+
+To understand how the pipeline operates, here is the layout of the scripts, data inputs, and generated outputs:
+
+```text
+.
+├── main.py                                  # Core AST analysis and data-flow extraction script
+├── run_block_clone_extractability.sh        # Batch processing bash script for all repositories
+├── index_methods.py                         # AST method indexing logic
+├── util_ast.py                              # AST traversal and read/write state extraction
+├── hazards.py                               # Control-flow and data-flow hazard detection
+├── templates/                               # HTML/CSS templates for the visual dashboard
+│   ├── header.html
+│   ├── footer.html
+│   ├── class_start.html
+│   └── instance_meta.html
+├── data/
+│   └── java-blocks/                         # Input JSONL files from initial clone detection
+│       └── <repo>-sim0.7/
+│           └── step4_nicad_<repo>_sim0.7_filtered_with_func_id.jsonl
+├── logs/                                    # Timestamped execution logs from the batch script
+│   └── block_clone_extractability_YYYYMMDD_HHMMSS.log
+└── output/
+    └── extractable_nicad_block_clones/      # Generated outputs
+        ├── <repo>_clone_analysis.jsonl      # Augmented JSONL with in/out sets and signatures
+        └── <repo>_clone_visualization.html  # Interactive HTML refactoring proof dashboard
+
+```
+
 ## Key Features
 
 ### 1. Granular Data-Flow Analysis ($V_r$ and $V_w$)
@@ -87,16 +124,34 @@ The resulting augmented JSONL appends critical data to each clone instance for L
 
 ## Usage
 
-Run the main Python script, passing in your JSONL clone data and the base directory of the target repository:
+### Single Repository (Individual Run)
+
+To run the extractability analysis on a single repository or a specific sample file, run `main.py` and provide the paths to your input JSONL, the base directory of the raw source code, and your desired output destinations:
 
 ```bash
 python main.py \
-  --jsonl ./data/input_clones.jsonl \
-  --base-dir /path/to/java/repo \
-  --output ./output/visualization.html \
-  --out-jsonl ./output/augmented_clones.jsonl \
-  --apply-drop-filters
+  --jsonl ./data/camel_clone_block_level_sample.jsonl \
+  --base-dir /home/user1-system11/research_dream/llm-clone/detect_clones/NiCad \
+  --output ./output/camel_clone_visualization_sample16.html \
+  --out-jsonl ./output/camel_clone_analysis_sample16.jsonl
 
 ```
 
-*Note: Omit the `--apply-drop-filters` flag if you want to keep full-function clones and single-instance classes in your dataset (they will be tagged but not removed).*
+### Multiple Repositories (Batch Run)
+
+To scale the data-flow analysis across all 50+ repositories automatically, use the included batch processing script. This script sequentially processes all repository JSONL files, captures detailed execution logs, and outputs the final `.jsonl` and `.html` files into a centralized output directory.
+
+```bash
+chmod +x run_block_clone_extractability.sh
+./run_block_clone_extractability.sh
+
+```
+
+**Batch Script Configuration:**
+Before running the batch script, ensure the paths at the top of `run_block_clone_extractability.sh` match your local environment:
+
+* `BASE_JSONL_ROOT`: The directory containing the output from your initial NiCad detection step.
+* `BASE_DIR`: The root directory of the raw source code repositories.
+* `OUT_ROOT`: The directory where the filtered JSONL and HTML files will be saved.
+
+Logs are automatically written to the `./logs` directory with a timestamped filename (e.g., `block_clone_extractability_20260227_165400.log`) so you can monitor the pipeline's progress safely.
