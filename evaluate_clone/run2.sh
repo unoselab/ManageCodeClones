@@ -1,11 +1,24 @@
-python 2_plot_delta.py --rcp "output/codebert/rcp_scores.jsonl" \
-                     --output "rcp_delta_codebert.png"
+INPUT_DIR="./data"
+OUTPUT_DIR="./output"
+MODELS="codegpt,codebert,codet5,graphcodebert"
 
-python 2_plot_delta.py --rcp "output/codegpt/rcp_scores.jsonl" \
-                     --output "rcp_delta_codegpt.png"
+echo " "
+echo "========================================="
+echo "== Generating Delta Charts"
+echo "========================================="
 
-python 2_plot_delta.py --rcp "output/codet5/rcp_scores.jsonl" \
-                     --output "rcp_delta_codet5.png"
+# 2. Convert comma-separated string to an array and loop to generate charts
+IFS=',' read -ra MODEL_ARRAY <<< "$MODELS"
 
-python 2_plot_delta.py --rcp "output/graphcodebert/rcp_scores.jsonl" \
-                     --output "rcp_delta_graphcodebert.png"
+for MODEL in "${MODEL_ARRAY[@]}"; do
+    JSONL_FILE="${OUTPUT_DIR}/${MODEL}/rcp_scores.jsonl"
+    CHART_FILE="./rcp_delta_chart_${MODEL}.png"
+    
+    if [ -f "$JSONL_FILE" ]; then
+        echo "Generating chart for $MODEL..."
+        python 2_plot_delta.py --rcp "$JSONL_FILE" --output "$CHART_FILE"
+    fi
+done
+
+echo " "
+echo "** Pipeline finished! All reports and charts are in $OUTPUT_DIR"

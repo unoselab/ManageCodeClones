@@ -5,7 +5,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+# Define distinct color palettes for each model
+COLOR_PALETTES = {
+    "codebert": "cividis",       # Pure Blues (Dark Navy to Light Sky Blue)
+    "codet5": "inferno",          # Pure Reds (Dark Crimson to Light Pink)
+    "codegpt": "flare",       # Pure Greens (Dark Forest to Light Mint)
+    "graphcodebert": "mako" # Pure Purples (Deep Violet to Light Lavender)
+}
+
 def generate_delta_chart(jsonl_path: str, output_path: str):
+    # Automatically detect the model name from the parent folder (e.g., 'output/codegpt/...')
+    model_name = Path(jsonl_path).parent.name.lower()
+    
+    # Fallback to 'viridis' if the model name isn't in our dictionary
+    selected_palette = COLOR_PALETTES.get(model_name, "viridis")
+
     # 1. Read the JSONL data
     data = []
     with open(jsonl_path, 'r', encoding='utf-8') as f:
@@ -15,16 +29,13 @@ def generate_delta_chart(jsonl_path: str, output_path: str):
                 
     df = pd.DataFrame(data)
 
-    # 2. Pivot the data to get 'before' and 'after' averages side-by-side for each subject
-    # We filter by a specific model (e.g., codegpt) if there are multiple
+    # 2. Pivot the data to get 'before' and 'after' averages side-by-side
     df_pivot = df.pivot(index='subject', columns='adapt', values='avg').reset_index()
 
     # Drop any subjects that don't have BOTH before and after data yet
     df_pivot = df_pivot.dropna(subset=['before', 'after'])
 
     # 3. Calculate the Delta (Improvement)
-    # Since penalties are negative, improvement is After - Before
-    # Example: -0.40 (After) - (-2.49) (Before) = +2.09 improvement
     df_pivot['delta'] = df_pivot['after'] - df_pivot['before']
 
     # 4. Sort from highest improvement to lowest
@@ -34,16 +45,17 @@ def generate_delta_chart(jsonl_path: str, output_path: str):
     plt.figure(figsize=(14, 6))
     sns.set_theme(style="whitegrid")
     
-    # Create the bar plot
+    # Create the bar plot using the dynamically selected palette
     ax = sns.barplot(
         x='subject', 
         y='delta', 
         data=df_pivot, 
-        palette="viridis"
+        palette=selected_palette
     )
 
-    # Add labels and title
-    plt.title('Improvement in Refactoring Compatibility Penalty (RCP) via Domain Adaptation', fontsize=16, pad=15)
+    # Add labels and dynamic title based on the model
+    formatted_model_name = model_name.replace("code", "Code").replace("gpt", "GPT").replace("bert", "BERT").replace("t5", "T5")
+    plt.title(f'Improvement in RCP via Domain Adaptation ({formatted_model_name})', fontsize=16, pad=15)
     plt.xlabel('Subject Projects', fontsize=12, labelpad=10)
     plt.ylabel('RCP Improvement (Reduction in Errors / Clone)', fontsize=12, labelpad=10)
 
@@ -57,9 +69,9 @@ def generate_delta_chart(jsonl_path: str, output_path: str):
     # Adjust layout to prevent cutting off the rotated x-labels
     plt.tight_layout()
 
-    # 6. Save the figure (300 DPI is standard for IEEE/ACM paper submissions)
+    # 6. Save the figure
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"--> Successfully saved Delta Bar Chart to: {output_path}")
+    print(f"--> Successfully saved {formatted_model_name} Delta Chart (Palette: {selected_palette}) to: {output_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a Delta Bar Chart for RCP scores.")

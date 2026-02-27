@@ -1,16 +1,17 @@
 #!/bin/bash
 
-MODEL="codegpt"
-OUTPUT_PATH="./output"
+# Define paths and models
+INPUT_DIR="./data"
+OUTPUT_DIR="./output"
+MODELS="codegpt,codebert,codet5,graphcodebert"
 
-# Loop through both stages automatically
-for ADAPT_STAGE in "before" "after"; do
-    INPUT_PATH="./data/pred_${ADAPT_STAGE}_adapt_refactorability/${MODEL}/"
+echo "========================================="
+echo "== Evaluating Models: $MODELS"
+echo "========================================="
 
-    echo "-----------------------------"
-    echo "Processing Directory: $INPUT_PATH"
-    echo "-----------------------------"
-    
-    python evaluate_clones.py --input-dir "$INPUT_PATH" --output "$OUTPUT_PATH"
-    echo " "
-done
+# 1. Evaluate all models and stages in one single Python call
+python 1_evaluate_clones.py \
+    --input-dir "$INPUT_DIR" \
+    --input-model "$MODELS" \
+    --output "$OUTPUT_DIR"
+

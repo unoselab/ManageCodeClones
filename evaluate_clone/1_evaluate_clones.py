@@ -84,12 +84,10 @@ def process_file(input_path: Path, template: Template, base_output_dir: Path):
     if "before" in str(input_path).lower(): stage = "before"
     elif "after" in str(input_path).lower(): stage = "after"
         
-    # Extract the model name and create its specific output subdirectory
     model = input_path.parent.name
     model_output_dir = base_output_dir / model
     model_output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Extract the subject (project name) from the filename
     file_stem = input_path.stem
     if file_stem.startswith("pred_"):
         subject = file_stem[5:].split('_')[0]
@@ -98,7 +96,6 @@ def process_file(input_path: Path, template: Template, base_output_dir: Path):
         subject = file_stem.split('_')[0]
         file_stem_clean = file_stem
         
-    # Save the HTML report directly into the model's subdirectory
     html_report_path = model_output_dir / f"report_{stage}_{model}_{file_stem_clean}.html"
     
     display_cols = [
@@ -126,7 +123,7 @@ def process_file(input_path: Path, template: Template, base_output_dir: Path):
     
     with open(html_report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"--> Saved Refactoring Compatibility Penalty (RCP) Report to: {html_report_path}")
+    print(f"--> Saved RCP Report to: {html_report_path}")
 
     return {
         "llm": model,
@@ -139,16 +136,16 @@ def process_file(input_path: Path, template: Template, base_output_dir: Path):
 def main():
     parser = argparse.ArgumentParser(description="Calculate metrics and generate HTML error reports.")
     parser.add_argument("--input", type=str, help="Path to a single CSV/TSV file.")
-    parser.add_argument("--input-dir", type=str, help="Path to a directory containing multiple CSV files.")
-    parser.add_argument("--output", type=str, required=True, help="Base directory to save the HTML reports and JSONL file.")
+    parser.add_argument("--input-dir", type=str, help="Base data directory (e.g., ./data).")
+    parser.add_argument("--input-model", type=str, help="Comma-separated list of models (e.g., codegpt,codebert).")
+    parser.add_argument("--output", type=str, required=True, help="Base directory to save outputs.")
     
     args = parser.parse_args()
 
     if not args.input and not args.input_dir:
-        print("Error: You must provide either --input (for a single file) or --input-dir (for a folder).")
+        print("Error: You must provide either --input or --input-dir.")
         sys.exit(1)
 
-    # Ensure base output directory exists
     base_output_dir = Path(args.output)
     base_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -157,46 +154,67 @@ def main():
 
     results = []
 
+    # 1. Single File Override
     if args.input:
         input_path = Path(args.input)
         if input_path.is_file():
             res = process_file(input_path, template, base_output_dir)
-            if res:
-                results.append(res)
-        else:
-            print(f"Error: Input file '{args.input}' not found.")
-            
-    if args.input_dir:
-        dir_path = Path(args.input_dir)
-        if dir_path.is_dir():
-            csv_files = list(dir_path.glob("*.csv"))
-            if not csv_files:
-                print(f"Warning: No CSV files found in directory '{args.input_dir}'.")
-            
-            for csv_file in csv_files:
-                res = process_file(csv_file, template, base_output_dir)
-                if res:
-                    results.append(res)
-        else:
-            print(f"Error: Directory '{args.input_dir}' not found.")
+            if res: results.append(res)
 
-    # Save collected results to JSONL, grouping by model
-    if results:
-        # Get unique models processed in this run
-        models = set(r["llm"] for r in results)
+    # 2. Directory & Model Traversal
+    if args.input_dir:
+        base_dir = Path(args.input_dir)
         
-        for m in models:
+        # If specific models are provided, traverse the strict structure
+        if args.input_model:
+            models = [m.strip() for m in args.input_model.split(",")]
+            stages = ["before", "after"]
+            
+            # Pre-clear old JSONL files so data doesn't duplicate on re-runs
+            for m in models:
+                jsonl_file = base_output_dir / m / "rcp_scores.jsonl"
+                if jsonl_file.exists():
+                    jsonl_file.unlink()
+
+            for stage in stages:
+                for model in models:
+                    target_dir = base_dir / f"pred_{stage}_adapt_refactorability" / model
+                    
+                    if target_dir.is_dir():
+                        csv_files = list(target_dir.glob("*.csv"))
+                        if not csv_files:
+                            print(f"Warning: No CSV files found in {target_dir}")
+                            
+                        for csv_file in csv_files:
+                            res = process_file(csv_file, template, base_output_dir)
+                            if res: results.append(res)
+                    else:
+                        print(f"Warning: Directory not found: {target_dir}")
+                        
+        # Fallback for simple flat-folder processing
+        else:
+            if base_dir.is_dir():
+                for csv_file in base_dir.glob("*.csv"):
+                    res = process_file(csv_file, template, base_output_dir)
+                    if res: results.append(res)
+
+    # 3. Save JSONL data grouped by model
+    if results:
+        models_processed = set(r["llm"] for r in results)
+        
+        for m in models_processed:
             model_results = [r for r in results if r["llm"] == m]
             model_dir = base_output_dir / m
             model_dir.mkdir(parents=True, exist_ok=True)
             
             jsonl_output_path = model_dir / "rcp_scores.jsonl"
             
+            # Safe to append because we deleted the old file at the start of the script
             with open(jsonl_output_path, "a", encoding="utf-8") as f:
                 for r in model_results:
                     f.write(json.dumps(r) + "\n")
                     
-            print(f"\n--> Appended {len(model_results)} RCP scores to: {jsonl_output_path}")
+            print(f"\n--> Saved {len(model_results)} RCP scores to: {jsonl_output_path}")
 
 if __name__ == "__main__":
     main()
