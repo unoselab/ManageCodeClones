@@ -28,9 +28,10 @@ def compute_penalties(row):
         
     # Rules 2-5: Only evaluate mapping if the model predicted a clone
     if row['clone_predict'] == 1:
-        if row['pair_left_in'] != row['pair_right_in']:
+        # Cast to string to safely handle potential NaN (empty) values in the CSV
+        if str(row['pair_left_in']) != str(row['pair_right_in']):
             p_in = -1
-        if row['pair_left_out'] != row['pair_right_out']:
+        if str(row['pair_left_out']) != str(row['pair_right_out']):
             p_out = -1
         if str(row['pair_inType_ok']).strip().lower() == 'false':
             p_intype = -1
@@ -80,12 +81,14 @@ def main():
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     
     overall_penalty = df['Total_Penalty'].sum()
-    total_pairs = len(df)
-    avg_penalty = overall_penalty / total_pairs if total_pairs > 0 else 0.0
+    
+    # Calculate average penalty based on ACTUAL clones, avoiding dilution from True Negatives
+    actual_clones = len(df[df['ground_truth'] == 1])
+    avg_penalty = overall_penalty / actual_clones if actual_clones > 0 else 0.0
 
     print(f"\n=== Evaluation Results for: {input_path.name} ===")
     print(f"TP: {TP} | FP: {FP} | TN: {TN} | FN: {FN}")
-    print(f"Total Penalty: {overall_penalty} (Average: {avg_penalty:.2f})")
+    print(f"Total Penalty: {overall_penalty} (Average per true clone: {avg_penalty:.2f})")
 
     # Generate HTML
     stage = "unknown"
@@ -124,7 +127,7 @@ def main():
     
     with open(html_report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"--> Saved HTML Error Report to: {html_report_path}\n")
+    print(f"--> Saved Refactoring Compatibility Penalty (RCP) Report to: {html_report_path}\n")
 
 if __name__ == "__main__":
     main()
