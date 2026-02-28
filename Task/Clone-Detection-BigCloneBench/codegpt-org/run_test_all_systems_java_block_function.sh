@@ -2,17 +2,17 @@
 set -u -o pipefail
 shopt -s nullglob
 
-DATASET_ROOT="../dataset"
-#OUT_ROOT="./saved_models_bcb"
+DATASET_ROOT="../dataset/nicad_block_java"
 OUT_ROOT="./saved_models_combined"
+MODEL="microsoft/CodeGPT-small-java-adaptedGPT2"
 
 EPOCHS="${1:-2}"
 SEED="${2:-3}"
 
-mkdir -p "$OUT_ROOT/predictions" "$OUT_ROOT/logs"
+mkdir -p "$OUT_ROOT/logs" "$OUT_ROOT/predictions_bcb_java_block_function"
 
 # ---- one single log file for everything ----
-RUN_LOG="$OUT_ROOT/logs/test_all_systems_combined.log"
+RUN_LOG="$OUT_ROOT/logs/test_all_systems_codegpt_bcb_java_block_function.log"
 exec > >(tee -a "$RUN_LOG") 2>&1
 
 # ---------- timing helpers ----------
@@ -23,8 +23,7 @@ fmt_duration () {
   printf "%02dh:%02dm:%02ds" $((total/3600)) $(((total%3600)/60)) $((total%60))
 }
 # -----------------------------------
-
-# Collect systems (exclude bck/org/combined_org10_plus_repos and require files)
+# Collect systems (exclude bck/org and require only test.txt and data.jsonl)
 systems=()
 for d in "$DATASET_ROOT"/*; do
   [[ -d "$d" ]] || continue
@@ -34,8 +33,9 @@ for d in "$DATASET_ROOT"/*; do
     bck|org|combined_org10_plus_repos) continue ;;
   esac
 
-  if [[ ! -f "$d/train.txt" || ! -f "$d/valid.txt" || ! -f "$d/test.txt" || ! -f "$d/data.jsonl" ]]; then
-    echo "[SKIP] $sys missing one of: train.txt / valid.txt / test.txt / data.jsonl"
+  # Only check for test.txt and data.jsonl
+  if [[ ! -f "$d/test.txt" || ! -f "$d/data.jsonl" ]]; then
+    echo "[SKIP] $sys missing: test.txt or data.jsonl"
     continue
   fi
 
@@ -43,7 +43,7 @@ for d in "$DATASET_ROOT"/*; do
 done
 
 echo "================================================"
-echo "Found ${#systems[@]} systems to test (excluded: bck, org)"
+echo "Found ${#systems[@]} systems to test (excluded: bck, org, combined_org10_plus_repos)"
 echo "DATASET_ROOT: $DATASET_ROOT"
 echo "OUT_ROOT    : $OUT_ROOT"
 echo "EPOCHS      : $EPOCHS"
@@ -62,7 +62,7 @@ for sys in "${systems[@]}"; do
   valid="$DATASET_ROOT/$sys/valid.txt"
   test="$DATASET_ROOT/$sys/test.txt"
 
-  preds_rel="predictions/predictions_${sys}_test.txt"
+  preds_rel="predictions_bcb_java_block_function/predictions_${sys}_test.txt"
   preds_abs="$OUT_ROOT/$preds_rel"
 
   # optional: don't re-run if predictions already exist
@@ -81,13 +81,12 @@ for sys in "${systems[@]}"; do
 
   sys_start_ts=$(date +%s)
 
-  # NOTE: no per-repo log; everything goes to $RUN_LOG via exec+tee above
   python run.py \
     --output_dir="$OUT_ROOT" \
-    --model_type=roberta \
-    --config_name=microsoft/codebert-base \
-    --model_name_or_path=microsoft/codebert-base \
-    --tokenizer_name=roberta-base \
+    --model_type=gpt2 \
+    --config_name="$MODEL" \
+    --model_name_or_path="$MODEL" \
+    --tokenizer_name="$MODEL" \
     --do_test \
     --train_data_file="$train" \
     --eval_data_file="$valid" \
@@ -106,7 +105,7 @@ for sys in "${systems[@]}"; do
   sys_end_ts=$(date +%s)
   sys_dur=$((sys_end_ts - sys_start_ts))
 
-  if [[ $rc -ne 0 ]]; then
+if [[ $rc -ne 0 ]]; then
     echo "[FAIL] $sys (exit=$rc) duration: $(fmt_duration "$sys_dur")"
     fail=$((fail+1))
   else
@@ -128,3 +127,4 @@ echo "  total          : $(fmt_duration "$total_dur")"
 echo "  finished       : $(date)"
 echo "Log saved to     : $RUN_LOG"
 echo "================================================"
+
