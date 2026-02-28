@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE_JSONL_ROOT="/home/user1-system11/research_dream/llm-clone/extract_clone/data/java-blocks"
 BASE_DIR="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad"
-OUT_ROOT="./output/dropped_function_clones"
+OUT_ROOT="./output/extractable_nicad_block_clones"
 
 LOG_DIR="./logs"
 mkdir -p "$OUT_ROOT" "$LOG_DIR"
