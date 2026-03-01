@@ -65,7 +65,7 @@ This script processes the raw JSONL and prediction files to create the unified C
 Assuming you are running this from your `~/research_dream/llm-clone/extract_clone` directory, here are the exact absolute paths you should use:
 
 ```bash
-python3 clone_refactorability_evaluation.py \
+python clone_refactorability_evaluation.py \
   --jsonl "/home/user1-system11/research_dream/llm-clone/extract_clone/output/extractable_nicad_block_clones/camel_clone_analysis.jsonl" \
   --gt "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/dataset/nicad_block_java/camel/test.txt" \
   --pred "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_bcb/predictions_bcb_java_block_function/predictions_camel_test.txt" \
