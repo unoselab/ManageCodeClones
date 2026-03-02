@@ -91,3 +91,25 @@ Clones are evaluated for extraction safety. A clone is dropped from the dataset 
 
 1. **`augmented_sample_python.jsonl`**: A rich dataset where each clone object includes inferred method signatures, `In(i)` / `Out(i)` sets, type maps, and hazard boolean flags.
 2. **`clone_visualization.html`**: A syntax-highlighted HTML report mapping the clones line-by-line, visually marking Read/Write variables, inferred parameters, and regional bounds.
+
+### 4. Data-Flow Extraction Sets (In and Out)
+
+To safely extract a clone block $i$ into a standalone function, the pipeline mathematically calculates the exact input parameters and return variables required. It does this by analyzing variable read ($V_r$) and write ($V_w$) operations across the three execution regions.
+
+**The Input Set:** $In(i)$
+The input set represents all variables that must be passed as parameters to the extracted method. A variable is an input if it is defined before the clone and read within the clone.
+$$In(i) = Use_{within}(i) \cap Def_{before}(i)$$
+
+Where:
+* $Use_{within}(i)$ is the set of all variables read during the clone block execution: $V_r(WITHIN)$.
+* $Def_{before}(i)$ is the set of all variables initialized prior to the clone, including function parameters and variables written in the pre-region: $V_w(PRE) \cup Parameters$.
+
+**The Output Set:** $Out(i)$
+The output set represents all variables that must be returned from the extracted method back to the enclosing scope. A variable is an output if it is modified within the clone and subsequently read after the clone.
+$$Out(i) = Def_{within}(i) \cap Use_{after}(i)$$
+
+Where:
+* $Def_{within}(i)$ is the set of all variables written to (mutated or assigned) inside the clone block: $V_w(WITHIN)$.
+* $Use_{after}(i)$ is the set of all variables read in the code following the clone block: $V_r(POST)$.
+
+*Note: If $|Out(i)| > 1$, the pipeline flags the clone with a **Data-Flow Hazard** (Multiple Outputs). While Python technically supports returning multiple values via tuples, cleanly extracting code blocks that mutate excessive external state is considered an anti-pattern for standard automated refactoring.*
