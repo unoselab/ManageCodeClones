@@ -1,9 +1,3 @@
-Here is a professional and comprehensive `README.md` file for your integrated pipeline.
-
-It explains the exact purpose of the tool, details the required directory structure, and explains the 40/30/30 case sampling constraints.
-
----
-
 # Clone Refactoring Inspection Pipeline
 
 ## Overview

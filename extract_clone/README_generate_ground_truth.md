@@ -1,6 +1,6 @@
 # Ground Truth Dataset Generation Pipeline
 
-This repository contains the automated bash pipeline for generating a fully structured, machine-learning-ready ground truth dataset. It consumes the mathematically proven, extractable code clones from the previous AST analysis step and orchestrates the generation of positive samples, negative samples, and deduplicated function corpora across multiple repositories.
+This repository contains the automated bash pipeline for generating a fully structured ground truth dataset. It consumes the mathematically proven, extractable code clones from the previous AST analysis step and orchestrates the generation of positive samples, negative samples, and deduplicated function corpora across multiple repositories.
 
 This pipeline automates **Steps 5 through 8** of the dataset creation process. It processes repositories sequentially, handling failures gracefully to ensure massive batch runs complete without interruption.
 
