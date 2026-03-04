@@ -25,11 +25,11 @@ class MethodRecord:
     method_info: Dict[str, Any]
 
 class FileMethodIndexPython:
-    def get(self, file_path: str) -> Tuple[PythonTreeSitterParser, List[MethodRecord]]:
+    def get(self, file_path: str) -> Tuple[PythonTreeSitterParser, Dict[str, MethodRecord]]:
         with open(file_path, 'r', encoding='utf-8') as f:
             src = f.read()
         parser = PythonTreeSitterParser(src)
-        methods = []  # Changed from dict to list to prevent name collisions
+        methods = {}
         
         for node in iter_descendants(parser.root):
             if node.type == "function_definition":
@@ -47,41 +47,19 @@ class FileMethodIndexPython:
                         "parameters": params, "local_variables": locals_list, "return_type": r_type
                     }
                 )
-                methods.append(record)  # Append to list instead of overwriting dictionary keys
+                methods[m_name] = record
         return parser, methods
 # ============================================================================
 
 def find_enclosing_method(methods, clone_start: int, clone_end: int):
-    best_record = None
-    max_overlap = 0
-    
-    # Iterate directly over the list of MethodRecords
-    for record in methods:
+    for qualified_name, record in methods.items():
         m_info = record.method_info
-        
-        # Ensure we have valid integers for start/end
-        try:
-            m_start = int(m_info.get("start_line", 0))
-            m_end = int(m_info.get("end_line", 0))
-        except (ValueError, TypeError):
-            continue
-        
-        if m_start == 0 or m_end == 0: 
-            continue
-            
-        # Calculate the intersection (overlap) between the method and the clone
-        overlap_start = max(m_start, clone_start)
-        overlap_end = min(m_end, clone_end)
-        
-        # Calculate number of overlapping lines
-        current_overlap = max(0, overlap_end - overlap_start + 1)
-        
-        # Keep the method with the largest overlap
-        if current_overlap > max_overlap:
-            max_overlap = current_overlap
-            best_record = record
-            
-    return best_record
+        m_start = m_info.get("start_line")
+        m_end = m_info.get("end_line")
+        if m_start and m_end:
+            if m_start <= clone_start and m_end >= clone_end:
+                return record
+    return None
 
 def find_node_by_range(root_node, start_line, end_line):
     target = None

@@ -1,0 +1,15 @@
+ln -s /home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_bcb/predictions_python \
+ /home/user1-system11/research_dream/llm-clone/extract_clone_py/data/prediction_before_adapt/codebert
+
+
+ln -s \
+/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codegpt-org/saved_models_bcb/predictions_python \
+/home/user1-system11/research_dream/llm-clone/extract_clone_py/data/prediction_before_adapt/codegpt
+
+ln -s \
+/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/graphcodebert/saved_models_bcb/predictions_python \
+/home/user1-system11/research_dream/llm-clone/extract_clone_py/data/prediction_before_adapt/graphcodebert
+
+ln -s \
+/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_combined_py/predictions_python \
+/home/user1-system11/research_dream/llm-clone/extract_clone_py/data/prediction_after_adapt/codebert

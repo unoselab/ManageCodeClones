@@ -22,6 +22,7 @@ checkpoint-*/
 
 # --- Datasets ---
 dataset/
+data/
 DataProc/nicad-*
 FCDetector/target/
 bck/
@@ -29,7 +30,6 @@ bck/
 *.tar.gz
 *.gz
 *.jsonl
-*.html
 detect_clones/NiCad-py/post_process/input-bck/
 detect_clones/NiCad-py/post_process/data/
 detect_clones/NiCad-py/post_process/data-bck/
