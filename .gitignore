@@ -22,6 +22,7 @@ checkpoint-*/
 
 # --- Datasets ---
 dataset/
+data/
 DataProc/nicad-*
 FCDetector/target/
 bck/
