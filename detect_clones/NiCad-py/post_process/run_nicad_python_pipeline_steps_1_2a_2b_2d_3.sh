@@ -22,7 +22,7 @@ MAX_SIZE=20
 # Paths
 # --------------------
 INPUT_DIR="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad-py/post_process/input"
-OUTPUT_ROOT="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad-py/post_process/data/py_funcs_step1_2a_2b_2d_3"
+OUTPUT_ROOT="/home/user1-system11/research_dream/llm-clone/detect_clones/NiCad-py/post_process/output/py_funcs_step1_2a_2b_2d_3"
 
 # --------------------
 # Init Output & Master Log
