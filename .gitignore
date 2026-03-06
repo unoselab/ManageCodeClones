@@ -50,3 +50,6 @@ output/
 /Examples
 /evaluate_clone/data-sample
 /evaluate_clone/data
+/evaluate_clone/data-py
+/evaluate_clone/data-sample-py
+/evaluate_clone/output-py
