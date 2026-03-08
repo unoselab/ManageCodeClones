@@ -1,3 +1,107 @@
+# Technical Report: Multi-Dimensional Complexity Evaluation Suite for Dom4LLM
+
+## 1. Overview and Rationale
+This repository contains the deterministic evaluation suite utilized in the **Dom4LLM** (Domain-Adaptive Large Language Models for Automated Code Clone Refactoring) pipeline. Adapting Large Language Models (LLMs) to project-specific structural idioms requires a rigorously engineered curriculum learning sequence. Relying on random sampling during fine-tuning often results in catastrophic forgetting or representation collapse due to domain shift.
+
+To facilitate an optimal learning trajectory—from generalized software patterns to highly localized, project-specific idioms—this suite evaluates contrastive code clone pairs across five orthogonal dimensions. The metrics dynamically construct a complexity matrix, generating a composite difficulty score that maps each pair to a specific curriculum tier. 
+
+## 2. The 5-Axis Complexity Matrix
+
+The evaluation suite calculates metrics across five discrete axes. Each dimension is handled by a dedicated Tree-sitter AST parsing script to ensure cross-language compatibility (primarily targeting Java and Python) and fault tolerance against malformed code snippets.
+
+### 2.1. Internal Control-Flow Complexity
+**Script:** `evaluate_controlflow_complexity.py`
+
+This module quantifies the cognitive load required to parse the internal logic of the clone snippets using an Asymmetry-Penalized Alignment Gap model. It parses the Abstract Syntax Tree (AST) to count linearly independent paths (McCabe's Cyclomatic Complexity, $c$), capturing explicit branches (`if`, `for`, `while`, `catch`) and implicit short-circuits (`&&`, `||`).
+
+
+
+To account for the structural divergence inherent in heavily modified code clones (e.g., mapping a straight-line function to a heavily nested one), the pair's composite score is computed using the following formula:
+
+$$Score_{CF} = \max(c_1, c_2) + \gamma \cdot |c_1 - c_2|$$
+
+Where $\gamma$ is the penalty weight (default $\gamma = 0.5$). This guarantees that structurally asymmetric pairs are ranked as strictly more difficult than symmetric pairs of an equivalent base complexity.
+
+### 2.2. Lexical and Structural Similarity Thresholds
+**Script:** `evaluate_similarity_thresholds.py`
+
+This module assesses the surface-level pattern matching required by the LLM. It calculates two distinct metrics:
+1.  **Lexical Similarity ($Sim_{lex}$):** The Jaccard index of normalized leaf-node tokens (ignoring comments).
+2.  **Structural Similarity ($Sim_{str}$):** The Ratcliff/Obershelp sequence matching ratio computed over the flattened AST node-type sequence.
+
+
+
+To prevent a high score in one metric from masking a catastrophic failure in the other (e.g., identical AST but completely divergent variable names), the composite score utilizes an Imbalance-Penalizing Harmonic Mean:
+
+$$Score_{Sim} = \frac{2 \cdot Sim_{lex} \cdot Sim_{str}}{Sim_{lex} + Sim_{str}}$$
+
+This formulation mathematically penalizes structural-lexical asymmetry, pulling the composite score toward the lower boundary, analogous to an F1-score computation.
+
+### 2.3. Semantic Divergence (Clone Taxonomy)
+**Script:** `evaluate_semantic_divergence.py`
+
+This dimension maps the clone pair into the standard software engineering taxonomy (Type-1 through Type-4), returning a discrete divergence penalty $\in \{1, 2, 3, 4\}$.
+
+
+
+* **Type-1 (Score 1):** Exact textual match (ignoring whitespace and comments).
+* **Type-2 (Score 2):** Identical AST structural sequence; divergent literals/identifiers.
+* **Type-3 (Score 3):** High structural overlap. The sequence matching ratio ($Ratio \ge 0.70$) indicates statement insertions, deletions, or modifications.
+* **Type-4 (Score 4):** Syntactically divergent ($Ratio < 0.70$), forcing the model to rely purely on semantic representation rather than structural alignment.
+
+### 2.4. Data-Flow Coupling Density
+**Script:** `evaluate_dataflow_coupling.py`
+
+This is the most critical metric for establishing safe preconditions for automated *Extract Method* refactorings. The module performs a localized def-use chain analysis via the AST. It tracks locally declared variables and identifies all external references (identifiers used inside the clone but declared outside its scope). These external references constitute the mandatory parameter set ($In(i)$) for the target refactored method.
+
+
+
+Because resolving multiple external boundaries simultaneously compounds the difficulty exponentially, a simple arithmetic maximum is insufficient. The pair score is calculated using the Euclidean Coupling Magnitude of the external dependency vectors $d_1$ and $d_2$:
+
+$$Score_{DF} = \sqrt{d_1^2 + d_2^2}$$
+
+A pair requiring 4 parameters each ($d_1=4, d_2=4$) yields a magnitude of $5.66$, correctly ranking it as more complex than an asymmetric pair ($d_1=4, d_2=0$, magnitude $4.0$).
+
+### 2.5. Architectural Distance
+**Script:** `evaluate_architectural_distance.py`
+
+This module evaluates the contextual isolation of the clone pair by representing the repository directory structure as a mathematical tree. The contextual gap is defined by the number of edge traversals required to navigate from the origin file to the deepest common ancestor, and down to the target file.
+
+
+
+$$Score_{Arch} = \text{Steps}_{up} + \text{Steps}_{down}$$
+
+The distances map to discrete architectural tiers:
+* **Tier 1 ($Distance = 0$):** Intra-file proximity. Identical namespace and context window.
+* **Tier 2 ($Distance \le 2$):** Intra-package proximity.
+* **Tier 3 ($Distance \le 4$):** Cross-package proximity.
+* **Tier 4 ($Distance > 4$):** Inter-package, globally dispersed clones requiring substantial global context resolution.
+
+## 3. Data Synthesis and Curriculum Routing
+**Script:** `merge_evaluations.py`
+
+The final stage of the evaluation pipeline reads the orthogonal outputs, normalizes the unbounded metrics to a $[0.0, 1.0]$ continuous scale, and computes the composite difficulty vector.
+
+For unbounded metrics like Control-Flow ($Score_{CF}$) and Data-Flow ($Score_{DF}$), min-max scaling is applied relative to empirically defined ceilings:
+
+$$Norm(x) = \max\left(0, \min\left(1, \frac{x - \min}{\max - \min}\right)\right)$$
+
+The final Curriculum Difficulty Score is computed via a weighted sum, explicitly prioritizing the Data-Flow Coupling bounds critical for refactoring safety:
+
+$$Tier_{Composite} = (CF_{norm} \cdot 0.15) + ((1 - Sim_{norm}) \cdot 0.20) + (Sem_{norm} \cdot 0.25) + (DF_{norm} \cdot 0.25) + (Arch_{norm} \cdot 0.15)$$
+
+This continuous variable $\in [0.0, 1.0]$ is subsequently quantized into four discrete training batches (Tiers 1-4), dictating the dynamic sampling ratio ($\alpha_e$) during the target-domain adaptation epochs.
+
+## 4. Execution Protocol
+
+The suite includes a fully automated, cross-platform batch processing engine (`run_pipeline.py`). It dynamically utilizes `pathlib.rglob` to discover all target dataset inputs across multiple domain directories and ensures execution isolation.
+
+**Command Line Execution:**
+```bash
+python run_pipeline.py --input ./data --output ./output/complexity/
+
+---
+
 # Complexity Matrix Evaluation Suite for Domain-Adaptive Code Clones
 
 This repository contains the evaluation suite used to quantify the structural, semantic, and architectural complexity of code clone pairs. 
