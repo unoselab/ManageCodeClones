@@ -1,69 +1,61 @@
-import ast
-import tokenize
-import io
-import difflib
+import os
 import json
+import argparse
+import itertools
+import difflib
+from tree_sitter import Language, Parser
+import tree_sitter_java as tsjava
 
-def get_lexical_tokens(source_code: str) -> list:
+# Initialize the Tree-sitter Java Language and Parser
+JAVA_LANGUAGE = Language(tsjava.language())
+parser = Parser(JAVA_LANGUAGE)
+
+def extract_tokens_and_structure(source_code: str):
     """
-    Extracts a list of meaningful lexical tokens from the source code.
-    We strip out whitespace, formatting, and comments to ensure the LLM
-    curriculum evaluates actual semantic code content, not formatting artifacts.
+    Traverses the Tree-sitter AST to extract both lexical tokens (leaf node text)
+    and the structural skeleton (node types).
+    Comments are explicitly ignored to prevent formatting biases.
     """
-    tokens = []
     try:
-        # Convert string to byte stream for the tokenizer
-        byte_stream = io.BytesIO(source_code.encode('utf-8'))
-        for tok in tokenize.tokenize(byte_stream.readline):
-            # Ignore encoding markers, whitespace, newlines, and comments
-            if tok.type not in (tokenize.ENCODING, tokenize.NEWLINE, 
-                                tokenize.INDENT, tokenize.DEDENT, 
-                                tokenize.NL, tokenize.COMMENT):
-                tokens.append(tok.string)
+        tree = parser.parse(bytes(source_code, "utf8"))
+        if tree.root_node.has_error and len(tree.root_node.children) == 0:
+            return [], []
     except Exception:
-        # Fallback if tokenization fails (e.g., invalid syntax)
-        pass
-    return tokens
+        return [], []
 
-def get_ast_node_sequence(source_code: str) -> list:
-    """
-    Extracts a flattened sequence of AST node types (e.g., 'FunctionDef', 'If', 'Return').
-    This strips away all variable names and literals, leaving only the pure 
-    structural skeleton of the code snippet.
-    """
-    node_sequence = []
-    try:
-        tree = ast.parse(source_code)
-        # ast.walk visits nodes in no guaranteed order, but it is consistent 
-        # for identical structures. For strict sequence alignment, visiting 
-        # via a custom ast.NodeVisitor is generally preferred, but walk() 
-        # suffices for structural set/sequence approximation.
-        for node in ast.walk(tree):
-            node_sequence.append(type(node).__name__)
-    except SyntaxError:
-        pass
-    return node_sequence
+    lexical_tokens = []
+    ast_node_types = []
+
+    def traverse(node):
+        # Ignore comments to ensure we only evaluate semantic code content
+        if node.type in {'line_comment', 'block_comment'}:
+            return
+            
+        # Record the structural sequence
+        ast_node_types.append(node.type)
+        
+        # If it's a leaf node, record its lexical text
+        if len(node.children) == 0:
+            text = node.text.decode('utf8').strip()
+            if text:
+                lexical_tokens.append(text)
+                
+        # Recursively visit children
+        for child in node.children:
+            traverse(child)
+
+    traverse(tree.root_node)
+    return lexical_tokens, ast_node_types
 
 def calculate_jaccard_similarity(list1: list, list2: list) -> float:
-    """
-    Calculates the Jaccard similarity index between two lists (used for sets of tokens).
-    Formula: Intersection size / Union size
-    Returns a float between 0.0 (no overlap) and 1.0 (exact match).
-    """
+    """Calculates Jaccard similarity between two lists (surface lexical overlap)."""
     set1, set2 = set(list1), set(list2)
     intersection = len(set1.intersection(set2))
     union = len(set1.union(set2))
-    
-    if union == 0:
-        return 0.0
-    return intersection / union
+    return intersection / union if union > 0 else 0.0
 
 def calculate_sequence_similarity(seq1: list, seq2: list) -> float:
-    """
-    Calculates the Ratcliff/Obershelp sequence similarity (used for structural order).
-    This ensures that the order of the AST nodes matters, not just their presence.
-    Returns a float between 0.0 and 1.0.
-    """
+    """Calculates Ratcliff/Obershelp similarity (structural sequence overlap)."""
     if not seq1 or not seq2:
         return 0.0
     matcher = difflib.SequenceMatcher(None, seq1, seq2)
@@ -72,23 +64,22 @@ def calculate_sequence_similarity(seq1: list, seq2: list) -> float:
 def evaluate_similarity_thresholds(clone_1_code: str, clone_2_code: str) -> dict:
     """
     Evaluates both the lexical (surface text) and structural (AST skeleton) 
-    similarity between two clone candidates.
+    similarity between two Java clone candidates.
+    
+    The composite score is calculated using the Harmonic Mean to heavily 
+    penalize asymmetrical similarities, mirroring the mechanics of an F1-score.
     """
-    # 1. Lexical Evaluation (Surface-level token similarity)
-    tokens_1 = get_lexical_tokens(clone_1_code)
-    tokens_2 = get_lexical_tokens(clone_2_code)
-    lexical_sim = calculate_jaccard_similarity(tokens_1, tokens_2)
+    lexical_1, structure_1 = extract_tokens_and_structure(clone_1_code)
+    lexical_2, structure_2 = extract_tokens_and_structure(clone_2_code)
     
-    # 2. Structural Evaluation (Deep AST skeleton similarity)
-    ast_seq_1 = get_ast_node_sequence(clone_1_code)
-    ast_seq_2 = get_ast_node_sequence(clone_2_code)
-    structural_sim = calculate_sequence_similarity(ast_seq_1, ast_seq_2)
+    lexical_sim = calculate_jaccard_similarity(lexical_1, lexical_2)
+    structural_sim = calculate_sequence_similarity(structure_1, structure_2)
     
-    # 3. Composite Score
-    # The curriculum matrix balances both to place the pair in the right tier.
-    # E.g., High Lexical + High Structural = Tier 1 (Easy)
-    # E.g., Low Lexical + High Structural = Tier 3 (Harder - variable renaming / Type-2/3)
-    composite_score = (lexical_sim + structural_sim) / 2.0
+    # Advanced Computation: Harmonic Mean
+    # We add a tiny epsilon (1e-9) to the denominator to prevent ZeroDivisionError 
+    # in the rare case that both similarities evaluate to absolute 0.0.
+    denominator = (lexical_sim + structural_sim) + 1e-9
+    composite_score = (2.0 * lexical_sim * structural_sim) / denominator
 
     return {
         "lexical_similarity": round(lexical_sim, 4),
@@ -97,41 +88,50 @@ def evaluate_similarity_thresholds(clone_1_code: str, clone_2_code: str) -> dict
     }
 
 # ==========================================
-# Example Usage
+# CLI Execution Block
 # ==========================================
 if __name__ == "__main__":
+    cli_parser = argparse.ArgumentParser(description="Evaluate lexical and structural similarity of Java clone pairs.")
+    cli_parser.add_argument("--input", type=str, required=True, help="Path to the input JSONL file")
+    cli_parser.add_argument("--output", type=str, required=True, help="Path to save the evaluated JSONL output")
     
-    # Snippet A: Original function
-    clone_a = """
-def calculate_discount(price, discount_rate):
-    if price > 100:
-        return price - (price * discount_rate)
-    return price
-"""
-
-    # Snippet B: Type-2 Clone (Identifiers changed, logic identical)
-    # Lexical similarity will drop slightly, but structural similarity remains 1.0
-    clone_b = """
-def apply_promo(cost, rate):
-    if cost > 100:
-        return cost - (cost * rate)
-    return cost
-"""
-
-    # Snippet C: Type-3 Clone (Statements added/modified)
-    # Both lexical and structural similarity will drop
-    clone_c = """
-def apply_promo_with_tax(cost, rate, tax=0.05):
-    if cost > 100:
-        discounted = cost - (cost * rate)
-        return discounted + (discounted * tax)
-    return cost + (cost * tax)
-"""
-
-    print("--- Comparing Snippet A to Snippet B (Type-2 Clone) ---")
-    result_ab = evaluate_similarity_thresholds(clone_a, clone_b)
-    print(json.dumps(result_ab, indent=4))
+    args = cli_parser.parse_args()
     
-    print("\n--- Comparing Snippet A to Snippet C (Type-3 Clone) ---")
-    result_ac = evaluate_similarity_thresholds(clone_a, clone_c)
-    print(json.dumps(result_ac, indent=4))
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    
+    print(f"Reading from : {args.input}")
+    print(f"Writing to   : {args.output}\n")
+    
+    processed_pairs_count = 0
+    
+    try:
+        with open(args.input, 'r') as infile, open(args.output, 'w') as outfile:
+            for line in infile:
+                if not line.strip():
+                    continue
+                    
+                clone_class = json.loads(line.strip())
+                sources = clone_class.get("sources", [])
+                
+                if len(sources) < 2:
+                    continue
+                    
+                # Generate combinatorial pairs
+                for inst_1, inst_2 in itertools.combinations(sources, 2):
+                    similarity_metrics = evaluate_similarity_thresholds(inst_1["code"], inst_2["code"])
+                    
+                    result_record = {
+                        "pair_id": f"{inst_1.get('func_id', 'unknown')}__AND__{inst_2.get('func_id', 'unknown')}",
+                        "clone_class_id": clone_class.get("classid"),
+                        "similarity_evaluation": similarity_metrics
+                    }
+                    
+                    outfile.write(json.dumps(result_record) + "\n")
+                    processed_pairs_count += 1
+                    
+        print(f"Done! Successfully evaluated and saved {processed_pairs_count} pairs.")
+        
+    except FileNotFoundError:
+        print(f"Error: The input file '{args.input}' was not found.")
+    except json.JSONDecodeError:
+        print(f"Error: The file '{args.input}' contains invalid JSON formatting.")
