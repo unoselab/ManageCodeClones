@@ -46,21 +46,55 @@ def calculate_snippet_complexity(source_code: str) -> int:
     except Exception:
         return -1
 
-def evaluate_pair_complexity(clone_1_code: str, clone_2_code: str) -> dict:
+def evaluate_pair_complexity(clone_1_code: str, clone_2_code: str, gamma: float = 0.5) -> dict:
     """
-    Evaluates the control-flow complexity for a pair of Java clone candidates.
+    Evaluates the composite control-flow complexity of a clone pair using an 
+    Asymmetry-Penalized Alignment Gap model.
+
+    Mathematical Computation:
+        Score = max(c1, c2) + (gamma * |c1 - c2|)
+
+    Rationale:
+        A simple `max(c1, c2)` ignores structural asymmetry. For an LLM attempting 
+        to map representations (or an engine attempting to extract them), a clone 
+        pair with complexities (2, 8) is fundamentally harder to process than a 
+        symmetrical pair of (8, 8). The (2, 8) pair contains a massive structural 
+        gap (e.g., mapping straight-line logic to heavily nested try/catch blocks).
+        
+        This formula accounts for both dimensions of difficulty:
+        1. The Cognitive Ceiling: `max(c1, c2)` ensures the baseline difficulty 
+           matches the hardest snippet the LLM must process.
+        2. The Alignment Penalty: `gamma * |c1 - c2|` strictly penalizes the 
+           structural divergence characteristic of complex Type-3 and Type-4 clones.
+
+    Args:
+        clone_1_code (str): Raw source code for the first clone instance.
+        clone_2_code (str): Raw source code for the second clone instance.
+        gamma (float): The weighting factor for the structural gap penalty. 
+                       Default is 0.5.
+
+    Returns:
+        dict: A dictionary containing individual scores, the calculated gap, 
+              and the final composite pair score.
     """
     c1_score = calculate_snippet_complexity(clone_1_code)
     c2_score = calculate_snippet_complexity(clone_2_code)
     
+    # If either snippet fails to parse (SyntaxError / Tree-sitter error)
     if c1_score == -1 or c2_score == -1:
         pair_score = -1 
+        structural_gap = -1
     else:
-        pair_score = max(c1_score, c2_score)
+        base_ceiling = max(c1_score, c2_score)
+        structural_gap = abs(c1_score - c2_score)
+        
+        # Calculate the final penalized score
+        pair_score = round(base_ceiling + (gamma * structural_gap), 2)
 
     return {
         "clone_1_complexity": c1_score,
         "clone_2_complexity": c2_score,
+        "structural_gap": structural_gap,
         "pair_complexity_score": pair_score
     }
 
