@@ -1,82 +1,61 @@
-import ast
+import os
 import json
+import argparse
+import itertools
+from tree_sitter import Language, Parser
+import tree_sitter_java as tsjava
 
-class ControlFlowComplexityVisitor(ast.NodeVisitor):
+# Initialize the Tree-sitter Java Language and Parser
+JAVA_LANGUAGE = Language(tsjava.language())
+parser = Parser(JAVA_LANGUAGE)
+
+def count_branching_nodes(node) -> int:
     """
-    An AST visitor that calculates the cyclomatic complexity of a Python code snippet.
-    Base complexity is 1. We add 1 for every control flow branch.
+    Recursively traverses the Tree-sitter AST to count Java control-flow branches.
     """
-    def __init__(self):
-        self.complexity = 1
-
-    def visit_If(self, node):
-        self.complexity += 1
-        self.generic_visit(node)
-
-    def visit_For(self, node):
-        self.complexity += 1
-        self.generic_visit(node)
-
-    def visit_While(self, node):
-        self.complexity += 1
-        self.generic_visit(node)
-
-    def visit_Try(self, node):
-        # Each except block adds a branching path
-        self.complexity += len(node.handlers)
-        self.generic_visit(node)
-
-    def visit_BoolOp(self, node):
-        # Logical operators like 'and', 'or' introduce hidden branches
-        self.complexity += len(node.values) - 1
-        self.generic_visit(node)
-
-    def visit_ListComp(self, node):
-        self.complexity += len(node.generators)
-        self.generic_visit(node)
+    complexity_addition = 0
+    
+    branch_node_types = {
+        'if_statement', 'for_statement', 'enhanced_for_statement', 
+        'while_statement', 'do_statement', 'catch_clause', 
+        'switch_label', 'ternary_expression'
+    }
+    
+    if node.type in branch_node_types:
+        complexity_addition += 1
         
-    def visit_SetComp(self, node):
-        self.complexity += len(node.generators)
-        self.generic_visit(node)
+    elif node.type == 'binary_expression':
+        operator_node = node.child_by_field_name('operator')
+        if operator_node and operator_node.type in {'&&', '||'}:
+            complexity_addition += 1
+
+    for child in node.children:
+        complexity_addition += count_branching_nodes(child)
         
-    def visit_DictComp(self, node):
-        self.complexity += len(node.generators)
-        self.generic_visit(node)
-
-    def visit_GeneratorExp(self, node):
-        self.complexity += len(node.generators)
-        self.generic_visit(node)
-
+    return complexity_addition
 
 def calculate_snippet_complexity(source_code: str) -> int:
     """
-    Parses the source code into an AST and computes its cyclomatic complexity.
-    Returns -1 if the code has syntax errors (cannot be parsed).
+    Parses the Java source code into a Tree-sitter AST and computes its cyclomatic complexity.
     """
     try:
-        tree = ast.parse(source_code)
-        visitor = ControlFlowComplexityVisitor()
-        visitor.visit(tree)
-        return visitor.complexity
-    except SyntaxError:
-        # Fallback for unparseable snippets
+        tree = parser.parse(bytes(source_code, "utf8"))
+        if tree.root_node.has_error and len(tree.root_node.children) == 0:
+            return -1
+        return 1 + count_branching_nodes(tree.root_node)
+    except Exception:
         return -1
-
 
 def evaluate_pair_complexity(clone_1_code: str, clone_2_code: str) -> dict:
     """
-    Evaluates the control-flow complexity for a pair of clone candidates.
-    Returns the individual complexities and the aggregate 'pair_score'.
+    Evaluates the control-flow complexity for a pair of Java clone candidates.
     """
     c1_score = calculate_snippet_complexity(clone_1_code)
     c2_score = calculate_snippet_complexity(clone_2_code)
     
-    # If either snippet fails to parse, flag the pair
     if c1_score == -1 or c2_score == -1:
         pair_score = -1 
     else:
-        # The complexity of the pair is defined by the most complex snippet within it.
-        # This ensures the LLM curriculum respects the hardest part of the alignment.
         pair_score = max(c1_score, c2_score)
 
     return {
@@ -86,37 +65,69 @@ def evaluate_pair_complexity(clone_1_code: str, clone_2_code: str) -> dict:
     }
 
 # ==========================================
-# Example Usage
+# CLI Execution Block
 # ==========================================
 if __name__ == "__main__":
+    # 1. Set up the argument parser
+    cli_parser = argparse.ArgumentParser(description="Evaluate control-flow complexity of Java clone pairs.")
+    cli_parser.add_argument(
+        "--input", 
+        type=str, 
+        required=True, 
+        help="Path to the input JSONL file (e.g., ./data/activemq-sim0.7/step1_nicad_activemq_sim0.7_raw.jsonl)"
+    )
+    cli_parser.add_argument(
+        "--output", 
+        type=str, 
+        required=True, 
+        help="Path to save the evaluated JSONL output (e.g., ./output/step1_nicad_activemq_sim0.7_evaluated.jsonl)"
+    )
     
-    # A simple Type-1/Type-2 clone (Low Complexity)
-    clone_a = """
-def calculate_total(prices):
-    total = 0
-    for p in prices:
-        total += p
-    return total
-"""
-
-    # A more complex Type-3/Type-4 clone with heavy control flow (High Complexity)
-    clone_b = """
-def get_valid_total(prices, discount=None):
-    total = 0
-    for p in prices:
-        if p > 0 and type(p) == int:
-            total += p
-        elif p == -1:
-            continue
-        else:
-            try:
-                total += int(p)
-            except ValueError:
-                pass
-    if discount:
-        total = total * (1 - discount)
-    return total
-"""
-
-    result = evaluate_pair_complexity(clone_a, clone_b)
-    print(json.dumps(result, indent=4))
+    args = cli_parser.parse_args()
+    input_filepath = args.input
+    output_filepath = args.output
+    
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(output_filepath)), exist_ok=True)
+    
+    print(f"Reading from : {input_filepath}")
+    print(f"Writing to   : {output_filepath}\n")
+    
+    processed_pairs_count = 0
+    
+    # 2. Process files
+    try:
+        with open(input_filepath, 'r') as infile, open(output_filepath, 'w') as outfile:
+            for line in infile:
+                if not line.strip():
+                    continue
+                    
+                clone_class = json.loads(line.strip())
+                sources = clone_class.get("sources", [])
+                
+                if len(sources) < 2:
+                    continue
+                    
+                # Generate all unique combinations within this clone class
+                for inst_1, inst_2 in itertools.combinations(sources, 2):
+                    
+                    # Evaluate complexity
+                    complexity_metrics = evaluate_pair_complexity(inst_1["code"], inst_2["code"])
+                    
+                    # Construct output record
+                    result_record = {
+                        "pair_id": f"{inst_1.get('func_id', 'unknown')}__AND__{inst_2.get('func_id', 'unknown')}",
+                        "clone_class_id": clone_class.get("classid"),
+                        "complexity_evaluation": complexity_metrics
+                    }
+                    
+                    # Write the result to the output file
+                    outfile.write(json.dumps(result_record) + "\n")
+                    processed_pairs_count += 1
+                    
+        print(f"Done! Successfully evaluated and saved {processed_pairs_count} pairs.")
+        
+    except FileNotFoundError:
+        print(f"Error: The input file '{input_filepath}' was not found.")
+    except json.JSONDecodeError:
+        print(f"Error: The file '{input_filepath}' contains invalid JSON formatting.")
