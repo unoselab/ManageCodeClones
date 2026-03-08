@@ -145,8 +145,8 @@ pip install tree-sitter==0.25.2 tree-sitter-java==0.23.5
 ```
 evaluate_complexity $ conda list|grep tree
 tree-sitter               0.25.2                   pypi_0    pypi
-tree-sitter-java          0.23.5                   pypi_0    pypi
 tree-sitter-languages     1.10.2                   pypi_0    pypi
+tree-sitter-java          0.23.5                   pypi_0    pypi
 tree-sitter-python        0.25.0                   pypi_0    pypi
 ```
 
