@@ -99,7 +99,84 @@ The suite includes a fully automated, cross-platform batch processing engine (`r
 **Command Line Execution:**
 ```bash
 python run_pipeline.py --input ./data --output ./output/complexity/
+```
 
+**Expected Output Topology:**
+```
+output/
+└── complexity/
+    ├── project_name_A/
+    │   ├── architecture/
+    │   ├── controlflow/
+    │   ├── dataflow/
+    │   ├── semantic/
+    │   ├── similarity/
+    │   └── [project_name_A]_complexity_merge.jsonl
+```
+
+
+
+
+## 5. Setup & Dependencies
+
+This evaluation suite is engineered to be lightweight, deterministic, and natively integrable into larger machine learning data-engineering pipelines or High-Performance Computing (HPC) environments. It strictly minimizes external dependencies to ensure long-term reproducibility.
+
+### 5.1. System Requirements
+* **Python:** Version 3.8 or higher is required due to the heavy utilization of the `pathlib` module and modern type-hinting standards.
+* **Operating System:** Cross-platform compatible (Linux, macOS, Windows). The batch processing engine utilizes `subprocess` and `pathlib` to guarantee path resolution irrespective of the host OS file-system standards.
+
+### 5.2. Core Dependencies
+The evaluation matrix relies fundamentally on **Tree-sitter**, an incremental parsing system for programming tools. 
+
+
+
+Tree-sitter is explicitly chosen over native parsers (like Python's `ast` or Java's `javaparser`) for three critical reasons:
+1.  **Cross-Language Uniformity:** It generates a standardized Abstract Syntax Tree (AST) structure regardless of the underlying target language, allowing this suite to be extended to C++, C#, or Python with minimal refactoring.
+2.  **Fault Tolerance:** Code clone datasets frequently contain incomplete or syntactically invalid snippets (e.g., missing closing brackets). Tree-sitter gracefully recovers from syntax errors, returning a partial AST rather than a fatal parsing exception.
+3.  **Byte-Level Precision:** It processes raw bytes, ensuring perfect alignment across complex Unicode boundaries, which is essential for accurate lexical feature extraction.
+
+**Installation Command:**
+```bash
+pip install tree-sitter==0.25.2 tree-sitter-java==0.23.5
+
+```
+
+**Reference**
+```
+evaluate_complexity $ conda list|grep tree
+tree-sitter               0.25.2                   pypi_0    pypi
+tree-sitter-java          0.23.5                   pypi_0    pypi
+tree-sitter-languages     1.10.2                   pypi_0    pypi
+tree-sitter-python        0.25.0                   pypi_0    pypi
+```
+
+**All other required modules (`math`, `json`, `argparse`, `itertools`, `difflib`, `pathlib`, `subprocess`, `sys`, `time`) are part of the Python Standard Library and require no external installation.**
+
+### 5.3. Input Data Topology Requirements
+
+To utilize the automated batch-processing engine (`run_pipeline.py`), your raw clone data must adhere to the following structural and structural preconditions:
+
+1. **Format:** The data must be serialized in JSON Lines (`.jsonl`) format. This prevents memory overflow (OOM) errors by allowing the pipeline to process classes sequentially, regardless of whether the dataset is 10 Megabytes or 100 Gigabytes.
+2. **Schema:** Each line must represent a single clone class and contain a `sources` array of clone instances. Each instance requires, at minimum, a `code` key (containing the raw source code) and a `file` key (containing the relative path to the source file for architectural evaluation).
+3. **Directory Hierarchy:** The target projects must be isolated into subdirectories within your designated data root. The batch runner will automatically crawl this hierarchy and mirror it in the output directory.
+
+**Expected Input Structure:**
+
+```text
+data_root/
+├── activemq-sim0.7/
+│   └── step4_nicad_activemq_sim0.7_filtered_with_func_id.jsonl
+├── ant-ivy-sim0.7/
+│   └── step4_nicad_ant-ivy_sim0.7_filtered_with_func_id.jsonl
+└── {project_name}/
+    └── step4_{identifier}.jsonl
+
+```
+
+
+
+---
+# Old Version
 ---
 
 # Complexity Matrix Evaluation Suite for Domain-Adaptive Code Clones
