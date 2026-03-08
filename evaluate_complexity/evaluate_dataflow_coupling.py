@@ -1,125 +1,155 @@
-import ast
-import builtins
+import os
 import json
+import argparse
+import itertools
+from tree_sitter import Language, Parser
+import tree_sitter_java as tsjava
 
-class DataFlowCouplingVisitor(ast.NodeVisitor):
-    """
-    An AST visitor that tracks variable declarations and usages to calculate
-    how many external variables a snippet depends on.
-    """
-    def __init__(self):
-        self.local_defs = set()
-        self.external_refs = set()
-        # We ignore Python built-ins (e.g., print, len, range, str) 
-        # because they are globally available and do not impede refactoring.
-        self.builtin_names = set(dir(builtins))
+# Initialize the Tree-sitter Java Language and Parser
+JAVA_LANGUAGE = Language(tsjava.language())
+parser = Parser(JAVA_LANGUAGE)
 
-    def visit_Assign(self, node):
-        # Track variables defined locally via standard assignment (e.g., x = 5)
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                self.local_defs.add(target.id)
-        self.generic_visit(node)
-
-    def visit_AnnAssign(self, node):
-        # Track variables defined with type hints (e.g., x: int = 5)
-        if isinstance(node.target, ast.Name):
-            self.local_defs.add(node.target.id)
-        self.generic_visit(node)
-
-    def visit_For(self, node):
-        # Track loop variables (e.g., 'i' in 'for i in range(10)')
-        if isinstance(node.target, ast.Name):
-            self.local_defs.add(node.target.id)
-        self.generic_visit(node)
-
-    def visit_Name(self, node):
-        """
-        Every time a variable name is encountered, we check its context.
-        If it is being read (ast.Load) or modified (ast.Store) and was NOT 
-        defined inside this snippet, it is an external coupling dependency.
-        """
-        is_read_or_write = isinstance(node.ctx, (ast.Load, ast.Store))
-        is_not_builtin = node.id not in self.builtin_names
-        is_not_local = node.id not in self.local_defs
-
-        if is_read_or_write and is_not_builtin and is_not_local:
-            self.external_refs.add(node.id)
-            
-        self.generic_visit(node)
-
+# Common Java built-ins and keywords to ignore during external reference counting
+JAVA_BUILTINS = {
+    'System', 'out', 'err', 'in', 'String', 'Object', 'Math', 'Integer', 
+    'Boolean', 'Double', 'Float', 'Long', 'Exception', 'RuntimeException',
+    'this', 'super', 'class', 'true', 'false', 'null'
+}
 
 def calculate_coupling_density(source_code: str) -> dict:
     """
-    Parses the snippet and returns the count and names of external variables.
-    Returns a score of -1 if the code cannot be parsed.
+    Traverses the Tree-sitter AST to calculate data-flow coupling.
+    It identifies locally declared variables and isolates identifiers that 
+    must be external dependencies (In/Out sets for refactoring).
     """
     try:
-        # Wrap the snippet in a function if it's a raw block of statements 
-        # to ensure it parses as a valid AST block.
-        tree = ast.parse(source_code)
-        visitor = DataFlowCouplingVisitor()
-        visitor.visit(tree)
-        
-        return {
-            "density_score": len(visitor.external_refs),
-            "external_variables": list(visitor.external_refs)
-        }
-    except SyntaxError:
-        return {
-            "density_score": -1,
-            "external_variables": []
-        }
+        tree = parser.parse(bytes(source_code, "utf8"))
+        if tree.root_node.has_error and len(tree.root_node.children) == 0:
+            return {"density_score": -1, "external_variables": []}
+    except Exception:
+        return {"density_score": -1, "external_variables": []}
 
-def evaluate_dataflow_coupling(clone_1_code: str, clone_2_code: str) -> dict:
+    local_defs = set()
+    used_identifiers = set()
+
+    def traverse(node):
+        # 1. Track Local Definitions
+        # variable_declarator generally contains the identifier name being defined
+        if node.type == 'variable_declarator':
+            name_node = node.child_by_field_name('name')
+            if name_node:
+                local_defs.add(name_node.text.decode('utf8'))
+                
+        # formal_parameter (e.g., inside a catch block or loop)
+        elif node.type == 'formal_parameter' or node.type == 'catch_formal_parameter':
+            name_node = node.child_by_field_name('name')
+            if name_node:
+                local_defs.add(name_node.text.decode('utf8'))
+                
+        # 2. Track Usages (Identifiers)
+        # We want to capture identifiers, but ignore method invocation names (which are structure, not data)
+        elif node.type == 'identifier':
+            parent_type = node.parent.type if node.parent else ""
+            if parent_type != 'method_invocation':
+                ident_name = node.text.decode('utf8')
+                if ident_name not in JAVA_BUILTINS:
+                    used_identifiers.add(ident_name)
+
+        # Recursively visit children
+        for child in node.children:
+            traverse(child)
+
+    traverse(tree.root_node)
+    
+    # External references are identifiers used in the block but NEVER defined in the block
+    external_refs = used_identifiers - local_defs
+
+    return {
+        "density_score": len(external_refs),
+        "external_variables": list(external_refs)
+    }
+
+import math
+
+def evaluate_pair_dataflow_coupling(clone_1_code: str, clone_2_code: str) -> dict:
     """
-    Evaluates the data-flow coupling density for a pair of clone candidates.
-    The curriculum relies on the maximum density of the pair to ensure 
-    the LLM respects the hardest refactoring boundaries.
+    Evaluates the data-flow coupling density for a pair of Java clone candidates.
+    
+    Mathematical Computation: Euclidean Vector Magnitude
+        Score = sqrt(c1^2 + c2^2)
+        
+    Rationale:
+        A simple `max()` function fails to capture the cumulative cognitive load when 
+        BOTH clones possess high coupling. By modeling the external variable dependencies 
+        as coordinates in a 2D coupling space, the Euclidean magnitude scales non-linearly.
+        A highly entangled pair (e.g., 4 and 4 external vars) yields a higher magnitude (5.66) 
+        than an asymmetrical pair (4 and 0 vars -> 4.0), accurately reflecting the compounded 
+        difficulty of resolving multiple extraction boundaries simultaneously.
     """
     c1_metrics = calculate_coupling_density(clone_1_code)
     c2_metrics = calculate_coupling_density(clone_2_code)
     
-    # If either fails to parse, flag the pair for manual review / highest tier
-    if c1_metrics["density_score"] == -1 or c2_metrics["density_score"] == -1:
-        pair_score = -1
+    c1_score = c1_metrics["density_score"]
+    c2_score = c2_metrics["density_score"]
+    
+    if c1_score == -1 or c2_score == -1:
+        pair_score = -1.0
     else:
-        # We take the maximum coupling. If Clone A has 0 external vars but 
-        # Clone B has 4, the pair is fundamentally complex to align and refactor.
-        pair_score = max(c1_metrics["density_score"], c2_metrics["density_score"])
+        # Calculate the Euclidean magnitude of the coupling vector
+        pair_score = round(math.sqrt((c1_score ** 2) + (c2_score ** 2)), 2)
 
     return {
         "clone_1_coupling": c1_metrics,
         "clone_2_coupling": c2_metrics,
         "pair_coupling_score": pair_score,
-        "description": f"Maximum of {pair_score} external variables must be managed across the extraction boundary."
+        "description": f"Euclidean coupling magnitude of {pair_score} based on external dependencies."
     }
 
 # ==========================================
-# Example Usage
+# CLI Execution Block
 # ==========================================
 if __name__ == "__main__":
+    cli_parser = argparse.ArgumentParser(description="Evaluate data-flow coupling (external variable dependencies) of Java clone pairs.")
+    cli_parser.add_argument("--input", type=str, required=True, help="Path to the input JSONL file")
+    cli_parser.add_argument("--output", type=str, required=True, help="Path to save the evaluated JSONL output")
     
-    # Snippet A: Fully self-contained clone (Low Coupling = 0)
-    # If we extract this, it needs 0 parameters.
-    clone_a = """
-total_sum = 0
-for i in range(10):
-    total_sum += i
-print(total_sum)
-"""
-
-    # Snippet B: Highly entangled clone (High Coupling = 3)
-    # It relies on 'user_id', 'db_connection', and 'logger' which are not defined here.
-    # If we extract this, we must pass 3 parameters.
-    clone_b = """
-query = f"SELECT * FROM users WHERE id = {user_id}"
-result = db_connection.execute(query)
-if result:
-    logger.info("User found.")
-    active_status = result['is_active']
-"""
-
-    print("--- Evaluating Data-Flow Coupling Density ---")
-    result = evaluate_dataflow_coupling(clone_a, clone_b)
-    print(json.dumps(result, indent=4))
+    args = cli_parser.parse_args()
+    
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    
+    print(f"Reading from : {args.input}")
+    print(f"Writing to   : {args.output}\n")
+    
+    processed_pairs_count = 0
+    
+    try:
+        with open(args.input, 'r') as infile, open(args.output, 'w') as outfile:
+            for line in infile:
+                if not line.strip():
+                    continue
+                    
+                clone_class = json.loads(line.strip())
+                sources = clone_class.get("sources", [])
+                
+                if len(sources) < 2:
+                    continue
+                    
+                # Generate combinatorial pairs
+                for inst_1, inst_2 in itertools.combinations(sources, 2):
+                    coupling_metrics = evaluate_pair_dataflow_coupling(inst_1["code"], inst_2["code"])
+                    
+                    result_record = {
+                        "pair_id": f"{inst_1.get('func_id', 'unknown')}__AND__{inst_2.get('func_id', 'unknown')}",
+                        "clone_class_id": clone_class.get("classid"),
+                        "dataflow_evaluation": coupling_metrics
+                    }
+                    
+                    outfile.write(json.dumps(result_record) + "\n")
+                    processed_pairs_count += 1
+                    
+        print(f"Done! Successfully evaluated coupling density for {processed_pairs_count} pairs.")
+        
+    except FileNotFoundError:
+        print(f"Error: The input file '{args.input}' was not found.")
+    except json.JSONDecodeError:
+        print(f"Error: The file '{args.input}' contains invalid JSON formatting.")
