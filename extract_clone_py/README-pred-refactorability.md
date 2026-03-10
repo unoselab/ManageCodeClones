@@ -1,7 +1,3 @@
-To improve the clarity of your documentation, I have reorganized the content to prioritize the workflow logic over raw directory paths. This structure helps users understand the "why" and "what" before diving into the "how" (the specific commands).
-
----
-
 # Clone Prediction & Refactorability Pipeline
 
 This pipeline integrates LLM clone detection predictions with static analysis data (AST/Dataflow) to evaluate the **refactorability** of identified code clones.
