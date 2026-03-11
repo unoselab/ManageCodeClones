@@ -54,3 +54,7 @@ output/
 /evaluate_clone/data-sample-py
 /evaluate_clone/output-py
 /evaluate_clone/output-java
+
+# --- IDE Settings ---
+node_modules
+/drag_refactor/out
