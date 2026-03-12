@@ -1104,6 +1104,13 @@ public class RubyModule extends RubyObject {
         }
 
         DynamicMethod method = searchMethod(oldName);
+        method = extracted(oldName, runtime, method);
+
+        invalidateCacheDescendants();
+        putMethod(name, new AliasMethod(this, method, oldName));
+    }
+
+    private DynamicMethod extracted(String oldName, Ruby runtime, DynamicMethod method) {
         if (method.isUndefined()) {
             if (isModule()) {
                 method = runtime.getObject().searchMethod(oldName);
@@ -1114,9 +1121,7 @@ public class RubyModule extends RubyObject {
                         (isModule() ? "module" : "class") + " `" + getName() + "'", oldName);
             }
         }
-
-        invalidateCacheDescendants();
-        putMethod(name, new AliasMethod(this, method, oldName));
+        return method;
     }
 
     public synchronized void defineAliases(List<String> aliases, String oldName) {
