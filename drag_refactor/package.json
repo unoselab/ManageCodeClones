@@ -13,7 +13,7 @@
     "onStartupFinished"
   ],  
   "main": "./out/drag_extension.js",
-"contributes": {
+  "contributes": {
     "views": {
       "explorer": [
         {
@@ -35,7 +35,15 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "dragDropZone.addSnippet",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorHasSelection"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
