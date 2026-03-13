@@ -39,13 +39,32 @@ class DropzoneProvider implements vscode.TreeDataProvider<DropItem>, vscode.Tree
         // Drop logic remains the same
     }
 
-    async handleDrag(source: readonly DropItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+async handleDrag(source: readonly DropItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
         if (source.length === 0) {
             return;
         }
         const draggedItem = source[0];
-        const transferItem = new vscode.DataTransferItem(draggedItem.content);
-        dataTransfer.set('text/plain', transferItem);
+        dataTransfer.set('text/plain', new vscode.DataTransferItem(draggedItem.content));
+        dataTransfer.set('application/vnd.drag.dropzone', new vscode.DataTransferItem(draggedItem.content));
+    }
+}
+
+class EditorDropProvider implements vscode.DocumentDropEditProvider {
+    async provideDocumentDropEdits(
+        _document: vscode.TextDocument,
+        _position: vscode.Position,
+        dataTransfer: vscode.DataTransfer,
+        _token: vscode.CancellationToken
+    ): Promise<vscode.DocumentDropEdit | undefined> {
+        
+        const dropzoneItem = dataTransfer.get('application/vnd.drag.dropzone');
+        if (dropzoneItem) {
+            const content = await dropzoneItem.asString();
+            console.log('Captured drop from Sidebar to Editor!');
+            vscode.window.showInformationMessage('Successfully dropped snippet from the Dropzone!');
+            return new vscode.DocumentDropEdit(content);
+        }
+        return undefined;
     }
 }
 
@@ -74,6 +93,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    const dropProvider = vscode.languages.registerDocumentDropEditProvider(
+        { language: '*' }, 
+        new EditorDropProvider()
+    );
+    context.subscriptions.push(dropProvider);    
     context.subscriptions.push(treeView);
     context.subscriptions.push(addSnippetCmd);
 }
