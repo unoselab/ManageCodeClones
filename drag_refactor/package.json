@@ -13,13 +13,29 @@
     "onStartupFinished"
   ],  
   "main": "./out/drag_extension.js",
-  "contributes": {
+"contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "dragDropZone",
+          "name": "Dropzone Snippets"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "drag.helloWorld",
-        "title": "Hello World"
+        "command": "dragDropZone.addSnippet",
+        "title": "Add to Dropzone"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "dragDropZone.addSnippet",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
