@@ -4,7 +4,7 @@ class DropItem extends vscode.TreeItem {
     constructor(public readonly label: string, public readonly content: string) {
         super(label, vscode.TreeItemCollapsibleState.None);
         this.tooltip = content;
-        this.description = "Code Snippet";
+        this.description = "";
     }
 }
 
@@ -39,7 +39,7 @@ class DropzoneProvider implements vscode.TreeDataProvider<DropItem>, vscode.Tree
         // Drop logic remains the same
     }
 
-async handleDrag(source: readonly DropItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+    async handleDrag(source: readonly DropItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
         if (source.length === 0) {
             return;
         }
