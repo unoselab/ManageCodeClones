@@ -118,7 +118,7 @@ class EditorDropProvider implements vscode.DocumentDropEditProvider {
 
 /**
  * Called when the extension is activated. 
- * Wires all providers, commands, and views together.
+ * Wires all providers, commands, views, and event listeners together.
  */
 export function activate(context: vscode.ExtensionContext) {
     console.log('Dropzone Extension is now active!');
@@ -148,16 +148,43 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Register the drop provider to catch snippets dropped into the text editor
+    // Register the drop provider to catch snippets dropped into the text editor from the sidebar
     const dropProvider = vscode.languages.registerDocumentDropEditProvider(
         { language: '*' }, 
         new EditorDropProvider()
     );
 
+    // --- Listen for native, same-file drag-and-drop events ---
+    const textChangeListener = vscode.workspace.onDidChangeTextDocument(event => {
+        const changes = event.contentChanges;
+
+        // A native drag-and-drop move creates exactly two changes in a SINGLE event: 
+        // A deletion of the highlighted text at the source, and an insertion at the destination.
+        if (changes.length === 2) {
+            
+            // Find which change represents the deletion and which is the insertion
+            const deletion = changes.find(c => c.text === '' && c.rangeLength > 0);
+            const insertion = changes.find(c => c.text !== '' && c.rangeLength === 0);
+
+            if (deletion && insertion) {
+                // Verify that the amount of deleted text matches the amount inserted
+                if (deletion.rangeLength === insertion.text.length) {
+                    
+                    console.log('Internal SAME-FILE Drag & Drop Detected!');
+                    console.log(`Moved text: "${insertion.text}"`);
+                    
+                    // Show a pop-up to confirm we caught it
+                    vscode.window.showInformationMessage(`Internal move captured: "${insertion.text}"`);
+                }
+            }
+        }
+    });
+
     // Add all disposables to the context subscriptions for proper memory cleanup
     context.subscriptions.push(dropProvider);    
     context.subscriptions.push(treeView);
     context.subscriptions.push(addSnippetCmd);
+    context.subscriptions.push(textChangeListener);
 }
 
 export function deactivate() {}
