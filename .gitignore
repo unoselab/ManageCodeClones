@@ -51,3 +51,11 @@ NiCad-py-block/
 /Examples
 /evaluate_clone/data-sample
 /evaluate_clone/data
+/evaluate_clone/data-py
+/evaluate_clone/data-sample-py
+/evaluate_clone/output-py
+/evaluate_clone/output-java
+
+# --- IDE Settings ---
+node_modules
+/drag_refactor/out
