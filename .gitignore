@@ -39,6 +39,7 @@ detect_clones/NiCad/post_process/data/java-blocks
 detect_clones/NiCad/post_process/input-blocks
 input/
 output/
+NiCad-py-block/
 
 # --- IDE Settings ---
 .vscode/
