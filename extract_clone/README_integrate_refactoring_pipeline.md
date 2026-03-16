@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `integrated_refactoring_pipeline.py` script is an end-to-end evaluation tool designed for large-scale clone detection research. It automates the extraction, filtering, and visualization of code clone pairs specifically optimized for **"Extract Method"** refactoring in IDEs like Eclipse or VS Code.
+The `integrate_refactoring_pipeline.py` script is an end-to-end evaluation tool designed for large-scale clone detection research. It automates the extraction, filtering, and visualization of code clone pairs specifically optimized for **"Extract Method"** refactoring in IDEs like Eclipse or VS Code.
 
 Instead of running separate evaluation and sampling scripts, this unified pipeline:
 
@@ -49,7 +49,7 @@ Execute the pipeline by providing the paths to your respective metadata director
 To run the pipeline silently and redirect all terminal output (including the sampling breakdown) to a permanent log file:
 
 ```bash
-python3 integrated_refactoring_pipeline.py \
+python3 integrate_refactoring_pipeline.py \
   --jsonl_dir "/home/user1-system11/research_dream/llm-clone/extract_clone/output/extractable_nicad_block_clones" \
   --gt_dir "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/dataset/nicad_block_java" \
   --pred_dir "/home/user1-system11/research_dream/llm-clone/Task/Clone-Detection-BigCloneBench/codebert/saved_models_bcb/predictions_bcb_java_block_function" \

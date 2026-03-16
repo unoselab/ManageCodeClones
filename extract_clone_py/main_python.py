@@ -348,7 +348,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
 
                     clone_node = find_node_by_range(enclosing_node, clone_start, clone_end)
                     is_full = is_full_function_robust(enclosing_node, clone_start, clone_end)
-                    # if is_full: dropped_full_functions += 1; continue
+                    if is_full: dropped_full_functions += 1; continue
 
                     rw_regions = extract_rw_by_region(
                         parser, enclosing_record.node,
@@ -404,9 +404,9 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                     is_hazardous = cf_hazard
                     extractable = (clone_node is not None) and (not cf_hazard) and (not is_full)
 
-                    # if is_hazardous:
-                    #     dropped_hazards += 1
-                    #     continue
+                    if is_hazardous:
+                        dropped_hazards += 1
+                        continue
 
                     # ===== Signature inference =====
                     original_return_type = m_info.get("return_type", "None")
@@ -512,7 +512,7 @@ def process_clone_jsonl(jsonl_path: str, base_dir: str, output_html: str, output
                 except Exception as e:
                     print(f"  > Error processing {func_id}: {e}")
 
-            # if len(augmented_sources) < 2: dropped_classes += 1; continue
+            if len(augmented_sources) < 2: dropped_classes += 1; continue
 
             augmented_class["sources"] = augmented_sources
             augmented_class["nclones"] = len(augmented_sources)
