@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 input_path = Path("/home/user1-system11/research_dream/llm-clone/extract_clone_py/output/sampling_clones/sampled_100_pairs.jsonl")
-output_path = Path("/home/user1-system11/research_dream/llm-clone/extract_clone_py/output/sampling_clones/sampled_pairs_refactored_false.jsonl")
+output_path = Path("/home/user1-system11/research_dream/llm-clone/extract_clone_py/output/sampling_clones/sampled_pairs_refactored_true.jsonl")
 
 with input_path.open("r", encoding="utf-8") as f:
     data = json.load(f)

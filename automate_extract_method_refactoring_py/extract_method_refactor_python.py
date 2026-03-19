@@ -4,7 +4,8 @@ import argparse
 import json
 import keyword
 import re
-from dataclasses import dataclass
+import textwrap
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -51,7 +52,6 @@ class CloneSource:
 class CloneClassCase:
     classid: str
     nclones: int
-    #similarity: float
     project: str
     same_file: int
     actual_label: int
@@ -72,7 +72,8 @@ class LineSpan:
 class ExtractionSignature:
     method_name: str
     is_static: bool
-    parameters: List[Tuple[str, str]]  # (type_name, param_name)
+    parameters: List[Tuple[str, str]]
+    out_variables: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -107,11 +108,8 @@ class RefactorResult:
 
 RANGE_RE = re.compile(r"^(\d+)-(\d+)$")
 
-PYTHON_KEYWORDS = set(keyword.kwlist) | {"True", "False", "None"}
-
 METHOD_NODE_TYPES = {"function_definition"}
 CLASS_NODE_TYPES = {"class_definition"}
-IF_NODE_TYPES = {"if_statement"}
 
 
 def parse_range(range_text: str) -> LineSpan:
@@ -138,30 +136,6 @@ def line_span_to_offsets(text: str, span: LineSpan) -> Tuple[int, int]:
     if span.end_line > len(offsets) - 1:
         raise ValueError(f"Range {span.start_line}-{span.end_line} exceeds file length")
     return offsets[span.start_line - 1], offsets[span.end_line]
-
-
-def common_indent(lines: Sequence[str]) -> str:
-    indents: List[str] = []
-    for line in lines:
-        if line.strip():
-            indents.append(re.match(r"[ \t]*", line).group(0))
-    if not indents:
-        return ""
-    prefix = indents[0]
-    for indent in indents[1:]:
-        while not indent.startswith(prefix):
-            prefix = prefix[:-1]
-            if not prefix:
-                return ""
-    return prefix
-
-
-def dedent_block(text: str) -> str:
-    lines = text.splitlines()
-    prefix = common_indent(lines)
-    if not prefix:
-        return text
-    return "\n".join(line[len(prefix):] if line.startswith(prefix) else line for line in lines)
 
 
 def indent_block(text: str, indent: str) -> str:
@@ -195,26 +169,6 @@ def normalize_type(type_name: str) -> str:
     return t if t else "Any"
 
 
-def trim_selected_range(file_text: str, start_offset: int, end_offset: int) -> Tuple[int, int]:
-    while start_offset < end_offset and file_text[start_offset].isspace():
-        start_offset += 1
-    while end_offset > start_offset and file_text[end_offset - 1].isspace():
-        end_offset -= 1
-    return start_offset, end_offset
-
-
-def range_matches_node(node, selected_start: int, selected_end: int) -> bool:
-    return node is not None and node.start_byte == selected_start and node.end_byte == selected_end
-
-
-def method_header_from_code(func_code: str) -> str:
-    for line in func_code.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped
-    return ""
-
-
 def infer_is_static(func_code: str) -> bool:
     lines = [line.strip() for line in func_code.splitlines() if line.strip()]
     for i, line in enumerate(lines[:3]):
@@ -237,123 +191,6 @@ def has_self_parameter(func_code: str) -> bool:
     return first == "self"
 
 
-def strip_comments_and_strings(code: str) -> str:
-    code = re.sub(r'"""[\s\S]*?"""', '""', code)
-    code = re.sub(r"'''[\s\S]*?'''", "''", code)
-    code = re.sub(r"#.*", "", code)
-    code = re.sub(r'"(?:\\.|[^"\\])*"', '""', code)
-    code = re.sub(r"'(?:\\.|[^'\\])*'", "''", code)
-    return code
-
-
-def extract_identifier_tokens(code: str) -> List[str]:
-    return re.findall(r"\b[A-Za-z_]\w*\b", code)
-
-
-def likely_type_name(name: str) -> bool:
-    return bool(name and name[0].isupper())
-
-
-def extract_declared_locals_python(code: str) -> set[str]:
-    declared = set()
-
-    patterns = [
-        r"^\s*([A-Za-z_]\w*)\s*=",
-        r"^\s*([A-Za-z_]\w*)\s*:\s*[^=]+(?:=.+)?$",
-        r"^\s*for\s+([A-Za-z_]\w*)\s+in\b",
-        r"^\s*except\b.*\bas\s+([A-Za-z_]\w*)\s*:",
-        r"^\s*with\b.*\bas\s+([A-Za-z_]\w*)\s*:",
-    ]
-
-    for line in code.splitlines():
-        for pat in patterns:
-            m = re.match(pat, line)
-            if m:
-                declared.add(m.group(1))
-    return declared
-
-
-def extract_method_local_declarations(code: str) -> set[str]:
-    return extract_declared_locals_python(code)
-
-
-def infer_variable_types_from_function(func_code: str) -> Dict[str, str]:
-    code = strip_comments_and_strings(func_code)
-    result: Dict[str, str] = {}
-
-    # parameters
-    m = re.search(r"def\s+\w+\s*\((.*?)\)\s*(?:->\s*([A-Za-z_][\w\[\], .]*)\s*)?:", code, flags=re.DOTALL)
-    if m:
-        params_blob = m.group(1).strip()
-        if params_blob:
-            parts = [p.strip() for p in params_blob.split(",")]
-            for part in parts:
-                part = part.lstrip("*")
-                pm = re.match(r"([A-Za-z_]\w*)(?:\s*:\s*([^=]+))?(?:\s*=.*)?$", part)
-                if pm:
-                    name = pm.group(1)
-                    type_name = pm.group(2).strip() if pm.group(2) else "Any"
-                    result[name] = type_name
-
-    # local typed assignments
-    for line in code.splitlines():
-        m1 = re.match(r"^\s*([A-Za-z_]\w*)\s*:\s*([^=]+)(?:=.*)?$", line)
-        if m1:
-            result.setdefault(m1.group(1), m1.group(2).strip())
-            continue
-        m2 = re.match(r"^\s*([A-Za-z_]\w*)\s*=", line)
-        if m2:
-            result.setdefault(m2.group(1), "Any")
-
-    return result
-
-
-def basic_free_variable_check(body: str, parameter_names: set[str], local_declared: set[str]) -> List[str]:
-    scan_body = strip_comments_and_strings(body)
-    tokens = extract_identifier_tokens(scan_body)
-
-    ignore = set(PYTHON_KEYWORDS) | {"self", "cls"}
-
-    free: List[str] = []
-    seen = set()
-
-    for token in tokens:
-        if token in ignore:
-            continue
-        if token in parameter_names:
-            continue
-        if token in local_declared:
-            continue
-        if likely_type_name(token):
-            continue
-
-        if re.search(rf"\b{re.escape(token)}\s*\(", scan_body):
-            continue
-
-        if re.search(rf"\.\s*{re.escape(token)}\b", scan_body):
-            continue
-
-        if token in seen:
-            continue
-        seen.add(token)
-        free.append(token)
-
-    return free
-
-
-def infer_extra_vars_for_source(body: str, src: CloneSource, existing_param_names: set[str]) -> List[str]:
-    local_declared = extract_method_local_declarations(body)
-    free_vars = basic_free_variable_check(body, existing_param_names, local_declared)
-    type_env = infer_variable_types_from_function(src.enclosing_function.func_code)
-
-    result: List[str] = []
-    for name in free_vars:
-        if src.defbefore_vars and name not in src.defbefore_vars and name not in type_env:
-            continue
-        result.append(name)
-    return result
-
-
 # ============================================================
 # Input loading
 # ============================================================
@@ -362,15 +199,26 @@ def infer_extra_vars_for_source(body: str, src: CloneSource, existing_param_name
 class CloneCaseLoader:
     @staticmethod
     def _parse_variables(entry: dict, key_name: str) -> List[CloneVariable]:
-        names = entry.get(key_name, [])
-        if key_name == "In(i)":
-            types = entry.get("InType", {}).get("InType", [])
-        else:
-            types = entry.get("OutType", [])
+        if not entry:
+            return []
+            
+        names = []
+        if isinstance(entry, dict):
+            names = entry.get(key_name, [])
+            if not names:
+                for k, v in entry.items():
+                    if isinstance(v, list) and v:
+                        names = v
+                        break
+        elif isinstance(entry, list):
+            names = entry
+        elif isinstance(entry, str):
+            names = [entry]
+            
         result = []
-        for idx, name in enumerate(names):
-            type_name = types[idx] if idx < len(types) else "Any"
-            result.append(CloneVariable(name=name, type_name=normalize_type(type_name)))
+        for name in names:
+            if isinstance(name, str):
+                result.append(CloneVariable(name=name, type_name="Any"))
         return result
 
     @classmethod
@@ -402,7 +250,6 @@ class CloneCaseLoader:
         return CloneClassCase(
             classid=payload["classid"],
             nclones=int(payload["nclones"]),
-            #similarity=float(payload.get("similarity", 0.0)),
             project=payload.get("project", ""),
             same_file=int(payload.get("same_file", 0)),
             actual_label=int(payload.get("actual_label", 0)),
@@ -466,73 +313,26 @@ class SignatureSynthesizer:
     def __init__(self, case: CloneClassCase):
         self.case = case
 
-    def _base_parameters(self) -> Tuple[List[Tuple[str, str]], bool]:
-        first_src = self.case.sources[0]
-        is_static = infer_is_static(first_src.enclosing_function.func_code)
-
-        common_names = {v.name for v in first_src.in_vars}
-        per_clone_types: Dict[str, str] = {v.name: normalize_type(v.type_name) for v in first_src.in_vars}
-
-        for src in self.case.sources[1:]:
-            src_names = {v.name for v in src.in_vars}
-            common_names &= src_names
-
-        parameters: List[Tuple[str, str]] = []
-        used_names: set[str] = set()
-
-        for var in first_src.in_vars:
-            if var.name not in common_names:
-                continue
-            if not is_static and var.name == "self":
-                continue
-            param_name = sanitize_identifier(var.name)
-            if param_name in used_names:
-                suffix = 2
-                base = param_name
-                while f"{base}{suffix}" in used_names:
-                    suffix += 1
-                param_name = f"{base}{suffix}"
-            used_names.add(param_name)
-            parameters.append((normalize_type(per_clone_types[var.name]), param_name))
-
-        return parameters, is_static
-
-    def _infer_extra_parameters(self, body: str, existing_params: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-        first_src = self.case.sources[0]
-
-        param_names = {name for _, name in existing_params}
-        local_declared = extract_method_local_declarations(body)
-        free_vars = basic_free_variable_check(body, param_names, local_declared)
-        type_env = infer_variable_types_from_function(first_src.enclosing_function.func_code)
-
-        existing_param_names = {name for _, name in existing_params}
-        extra: List[Tuple[str, str]] = []
-
-        for name in free_vars:
-            sanitized = sanitize_identifier(name)
-            if sanitized in existing_param_names:
-                continue
-            if name == "self":
-                continue
-            if first_src.defbefore_vars and name not in first_src.defbefore_vars and name not in type_env:
-                continue
-            type_name = normalize_type(type_env.get(name, "Any"))
-            extra.append((type_name, sanitized))
-            existing_param_names.add(sanitized)
-
-        return extra
-
-    def synthesize(self, normalized_body: str) -> ExtractionSignature:
+    def synthesize(self) -> ExtractionSignature:
         if not self.case.sources:
             raise ValueError("Empty clone class")
 
-        parameters, is_static = self._base_parameters()
-        parameters += self._infer_extra_parameters(normalized_body, parameters)
+        first_src = self.case.sources[0]
+        is_static = infer_is_static(first_src.enclosing_function.func_code)
+
+        parameters: List[Tuple[str, str]] = []
+        for var in first_src.in_vars:
+            if not is_static and var.name == "self":
+                continue
+            parameters.append((normalize_type(var.type_name), sanitize_identifier(var.name)))
+
+        out_vars = [sanitize_identifier(v.name) for v in first_src.out_vars]
 
         return ExtractionSignature(
             method_name=choose_unique_method_name(self.case.classid),
             is_static=is_static,
             parameters=parameters,
+            out_variables=out_vars,
         )
 
 
@@ -542,64 +342,37 @@ class SignatureSynthesizer:
 
 
 class CloneNormalizer:
-    def __init__(self, signature: ExtractionSignature, case: CloneClassCase, locator: CloneLocator, source_root: Path):
-        self.signature = signature
+    def __init__(self, case: CloneClassCase, locator: CloneLocator):
         self.case = case
         self.locator = locator
-        self.source_root = source_root
-
-    def _find_covering_node(self, node, start_offset: int, end_offset: int):
-        if not (node.start_byte <= start_offset and end_offset <= node.end_byte):
-            return None
-        for child in getattr(node, "children", []):
-            hit = self._find_covering_node(child, start_offset, end_offset)
-            if hit is not None:
-                return hit
-        return node
-
-    def _node_text(self, file_text: str, node) -> str:
-        return file_text[node.start_byte:node.end_byte]
-
-    def _unwrap_block_or_statement(self, text: str) -> str:
-        return dedent_block(text).strip("\n")
 
     def normalized_body(self) -> str:
         first = self.case.sources[0]
         file_text = self.locator.load_source(first.file)
-        raw_start, raw_end = self.locator.clone_offsets(file_text, first.clone_range)
-        start_offset, end_offset = trim_selected_range(file_text, raw_start, raw_end)
-
-        _parser, method_node = self.locator.find_method_node(first)
-        target = self._find_covering_node(method_node, start_offset, end_offset)
-
-        if target is None:
-            return dedent_block(first.code).strip("\n")
-
-        original_fragment = file_text[raw_start:raw_end]
-
-        cur = target
-        while cur is not None:
-            if cur.type in IF_NODE_TYPES:
-                consequence = cur.child_by_field_name("consequence")
-                alternative = cur.child_by_field_name("alternative")
-
-                if range_matches_node(consequence, start_offset, end_offset):
-                    return self._unwrap_block_or_statement(self._node_text(file_text, consequence))
-
-                if range_matches_node(alternative, start_offset, end_offset):
-                    return self._unwrap_block_or_statement(self._node_text(file_text, alternative))
-
-                if (
-                    alternative is not None
-                    and consequence is not None
-                    and cur.start_byte == start_offset
-                    and consequence.end_byte == end_offset
-                ):
-                    return self._unwrap_block_or_statement(self._node_text(file_text, consequence))
-
-            cur = cur.parent
-
-        return dedent_block(original_fragment).strip("\n")
+        span = parse_range(first.clone_range)
+        
+        lines = file_text.splitlines(keepends=True)
+        raw_lines = lines[span.start_line - 1 : span.end_line]
+        
+        raw_text = "".join(raw_lines).expandtabs(4)
+        lines_text = raw_text.splitlines()
+        
+        first_indent = ""
+        for line in lines_text:
+            if line.strip():
+                first_indent = re.match(r"^[ \t]*", line).group(0)
+                break
+        
+        dedented = []
+        for line in lines_text:
+            if line.startswith(first_indent):
+                dedented.append(line[len(first_indent):])
+            elif not line.strip():
+                dedented.append("")
+            else:
+                dedented.append(line)
+                
+        return "\n".join(dedented).strip("\n")
 
 
 class PythonMethodRenderer:
@@ -626,6 +399,12 @@ class PythonMethodRenderer:
             lines.append(indent_block(body, "    "))
         else:
             lines.append("    pass")
+            
+        if self.signature.out_variables:
+            returns = ", ".join(self.signature.out_variables)
+            # Smart Check: Only append return __return__ if the code doesn't natively return already
+            if not ("return " in body and "__return__" in self.signature.out_variables):
+                lines.append(indent_block(f"return {returns}", "    "))
 
         return "\n".join(lines)
 
@@ -641,140 +420,42 @@ class Rewriter:
         source_root: Path,
         case: CloneClassCase,
         signature: ExtractionSignature,
-        normalized_bodies: Dict[str, str],
+        in_class_scope: bool
     ):
         self.source_root = source_root
         self.case = case
         self.signature = signature
-        self.normalized_bodies = normalized_bodies
+        self.in_class_scope = in_class_scope
         self.locator = CloneLocator(source_root)
 
     def _call_args_for_source(self, source: CloneSource) -> List[str]:
         source_arg_map = {sanitize_identifier(v.name): v.name for v in source.in_vars}
-
-        common_names = {v.name for v in self.case.sources[0].in_vars}
-        for src in self.case.sources[1:]:
-            common_names &= {v.name for v in src.in_vars}
-
-        common_param_names = [
-            sanitize_identifier(v.name)
-            for v in self.case.sources[0].in_vars
-            if v.name in common_names and v.name != "self"
-        ]
-        common_param_count = len(common_param_names)
-
-        existing_param_names = set(common_param_names)
-        body = self.normalized_bodies[source.func_id]
-        extra_vars = infer_extra_vars_for_source(body, source, existing_param_names)
-
         args: List[str] = []
-        extra_index = 0
-
-        for idx, (_type_name, param_name) in enumerate(self.signature.parameters):
-            if idx < common_param_count:
-                actual = source_arg_map.get(param_name, param_name)
-                args.append(actual)
-            else:
-                if extra_index < len(extra_vars):
-                    args.append(extra_vars[extra_index])
-                    extra_index += 1
-                else:
-                    args.append(param_name)
-
+        for _type_name, param_name in self.signature.parameters:
+            args.append(source_arg_map.get(param_name, param_name))
         return args
-
-    def _find_covering_node(self, node, start_offset: int, end_offset: int):
-        if not (node.start_byte <= start_offset and end_offset <= node.end_byte):
-            return None
-        for child in getattr(node, "children", []):
-            hit = self._find_covering_node(child, start_offset, end_offset)
-            if hit is not None:
-                return hit
-        return node
-
-    def _find_smallest_enclosing_if(self, node):
-        cur = node
-        while cur is not None:
-            if cur.type in IF_NODE_TYPES:
-                return cur
-            cur = cur.parent
-        return None
-
-    def _render_if_with_extracted_call(self, original_fragment: str, call_line: str) -> str:
-        lines = original_fragment.splitlines()
-        if not lines:
-            return call_line + "\n"
-
-        first_line = lines[0]
-        # Identify the indentation of the original first line (the 'if' or 'else')
-        first_indent = re.match(r"[ \t]*", first_line).group(0)
-
-        # Use 4 spaces as a default if we can't find the body indent
-        body_indent = first_indent + "    "
-        for line in lines[1:]:
-            if line.strip():
-                body_indent = re.match(r"[ \t]*", line).group(0)
-                break
-
-        # Ensure the call_line is indented and followed by a newline
-        return f"{first_line.rstrip()}\n{body_indent}{call_line.strip()}\n"
 
     def _build_callsite(self, source: CloneSource, file_text: str) -> str:
         args = ", ".join(self._call_args_for_source(source))
-        call_line = f"{self.signature.method_name}({args})"
+        
+        prefix = ""
+        source_out_names = [v.name for v in source.out_vars]
+        if not source_out_names and self.signature.out_variables:
+            source_out_names = self.signature.out_variables
+            
+        if source_out_names:
+            prefix = f"{', '.join(source_out_names)} = "
+            
+        caller = "self." if (self.in_class_scope and not self.signature.is_static) else ""
+        call_line = f"{prefix}{caller}{self.signature.method_name}({args})"
 
-        raw_start, raw_end = self.locator.clone_offsets(file_text, source.clone_range)
-        start_offset, end_offset = trim_selected_range(file_text, raw_start, raw_end)
-        original_fragment = file_text[raw_start:raw_end]
+        span = parse_range(source.clone_range)
+        lines = file_text.splitlines()
+        first_line = lines[span.start_line - 1].expandtabs(4)
+        base_indent_match = re.match(r"^[ \t]*", first_line)
+        base_indent = base_indent_match.group(0) if base_indent_match else ""
 
-        _parser, method_node = self.locator.find_method_node(source)
-        target = self._find_covering_node(method_node, start_offset, end_offset)
-
-        if target is not None:
-            enclosing_if = self._find_smallest_enclosing_if(target)
-            if enclosing_if is not None:
-                consequence = enclosing_if.child_by_field_name("consequence")
-                alternative = enclosing_if.child_by_field_name("alternative")
-
-                if range_matches_node(consequence, start_offset, end_offset):
-                    return self._render_if_with_extracted_call(original_fragment, call_line)
-
-                if range_matches_node(alternative, start_offset, end_offset):
-                    return self._render_if_with_extracted_call(original_fragment, call_line)
-
-                if (
-                    consequence is not None
-                    and alternative is not None
-                    and enclosing_if.start_byte == start_offset
-                    and consequence.end_byte == end_offset
-                ):
-                    return self._render_if_with_extracted_call(original_fragment, call_line)
-
-        lines = original_fragment.splitlines()
-        indent = common_indent(lines) or ""
-        return f"{indent}{call_line}\n"
-
-    def _insert_method(self, file_text: str, relative_file: str, extracted_method_code: str) -> str:
-        first_source_in_file = next(src for src in self.case.sources if src.file == relative_file)
-        parser, class_node = self.locator.find_enclosing_class_node(first_source_in_file)
-
-        if class_node is not None:
-            body = class_node.child_by_field_name("body")
-            insert_at = body.end_byte if body is not None else class_node.end_byte
-            class_indent = re.match(
-                r"[ \t]*",
-                file_text[file_text.rfind("\n", 0, class_node.start_byte) + 1: class_node.start_byte]
-            ).group(0)
-            method_indent = class_indent + "    "
-            indented_method = indent_block(extracted_method_code, method_indent)
-            insertion = "\n\n" + indented_method
-            return file_text[:insert_at] + insertion + file_text[insert_at:]
-
-        # module-level insertion after enclosing function
-        _, func_node = self.locator.find_method_node(first_source_in_file)
-        insert_at = func_node.end_byte
-        insertion = "\n\n" + extracted_method_code
-        return file_text[:insert_at] + insertion + file_text[insert_at:]
+        return f"{base_indent}{call_line}\n"
 
     def rewrite(self, extracted_method_code: str) -> Tuple[List[CloneRewrite], List[RewriteArtifact]]:
         by_file: Dict[str, List[CloneSource]] = {}
@@ -787,25 +468,57 @@ class Rewriter:
 
         for relative_file, clone_sources in by_file.items():
             file_text = self.locator.load_source(relative_file)
-            replacements: List[Tuple[Tuple[int, int], str]] = []
+            
+            first_source = clone_sources[0]
+            parser, class_node = self.locator.find_enclosing_class_node(first_source)
+            _, func_node = self.locator.find_method_node(first_source)
+            
+            target_node = class_node if class_node else func_node
+            insert_at_original = target_node.end_byte
 
+            # Safety check: If TreeSitter choked on bad syntax, it truncates the AST.
+            # We force it to the end of the file so we don't inject inside a try/catch block.
+            max_clone_end = max(self.locator.clone_offsets(file_text, src.clone_range)[1] for src in clone_sources)
+            if insert_at_original < max_clone_end:
+                insert_at_original = len(file_text)
+
+            replacements: List[Tuple[Tuple[int, int], str]] = []
             for src in clone_sources:
                 start_offset, end_offset = self.locator.clone_offsets(file_text, src.clone_range)
-                replacement = self._build_callsite(src, file_text)
+                call_site = self._build_callsite(src, file_text)
                 replacements_out.append(
                     CloneRewrite(
                         func_id=src.func_id,
                         file=src.file,
                         clone_range=src.clone_range,
-                        replacement_code=replacement,
+                        replacement_code=call_site,
                     )
                 )
-                replacements.append(((start_offset, end_offset), replacement))
+                replacements.append(((start_offset, end_offset), call_site))
 
+            # Apply call site replacements first
             rewritten = apply_replacements(file_text, replacements)
+
+            # Mathematical Shift: Calculate where insert_at shifted to
             inserted = False
             if relative_file == first_file:
-                rewritten = self._insert_method(rewritten, relative_file, extracted_method_code)
+                delta = 0
+                for (start, end), rep_str in replacements:
+                    if end <= insert_at_original:
+                        delta += len(rep_str) - (end - start)
+                    elif start < insert_at_original < end:
+                        delta += len(rep_str) - (insert_at_original - start)
+
+                new_insert_at = insert_at_original + delta
+
+                lines = file_text.splitlines(keepends=True)
+                start_line_idx = target_node.start_point[0]
+                base_indent = re.match(r"^[ \t]*", lines[start_line_idx].expandtabs(4)).group(0)
+                method_indent = base_indent + "    " if class_node else base_indent
+                indented_method = "\n\n" + indent_block(extracted_method_code, method_indent) + "\n"
+
+                # Apply isolated method insertion
+                rewritten = rewritten[:new_insert_at] + indented_method + rewritten[new_insert_at:]
                 inserted = True
 
             artifacts.append(
@@ -832,59 +545,18 @@ class ExtractMethodRefactorer:
 
     def refactor(self, case: CloneClassCase) -> RefactorResult:
         first_func_code = case.sources[0].enclosing_function.func_code
-        is_static = infer_is_static(first_func_code)
-
-        base_signature = ExtractionSignature(
-            method_name=choose_unique_method_name(case.classid),
-            is_static=is_static,
-            parameters=[
-                (normalize_type(v.type_name), sanitize_identifier(v.name))
-                for v in case.sources[0].in_vars
-                if not (v.name == "self" and not is_static)
-            ],
-        )
-
-        normalized_bodies: Dict[str, str] = {}
-        for src in case.sources:
-            single_case = CloneClassCase(
-                classid=case.classid,
-                nclones=1,
-                #similarity=case.similarity,
-                project=case.project,
-                same_file=case.same_file,
-                actual_label=case.actual_label,
-                clone_predict=case.clone_predict,
-                clone_predict_after_adapt=case.clone_predict_after_adapt,
-                refactorable=case.refactorable,
-                inspection_case=case.inspection_case,
-                sources=[src],
-            )
-            normalized_bodies[src.func_id] = CloneNormalizer(
-                base_signature, single_case, self.locator, self.source_root
-            ).normalized_body()
-
-        normalized_body = normalized_bodies[case.sources[0].func_id]
-        signature = SignatureSynthesizer(case).synthesize(normalized_body)
-
-        param_names = {name for _, name in signature.parameters}
-        declared_local_names = extract_method_local_declarations(normalized_body)
-        free_vars = basic_free_variable_check(normalized_body, param_names, declared_local_names)
-
-        diagnostics: List[str] = []
-        if free_vars:
-            diagnostics.append(
-                "Potential missing parameters or unresolved names in extracted body: "
-                + ", ".join(free_vars)
-            )
-
         in_class_scope = has_self_parameter(first_func_code) or ("." in case.sources[0].enclosing_function.qualified_name)
+
+        signature = SignatureSynthesizer(case).synthesize()
+        
+        normalized_body = CloneNormalizer(case, self.locator).normalized_body()
 
         extracted_method_code = PythonMethodRenderer(
             signature, normalized_body, in_class_scope=in_class_scope
         ).render()
 
         replacements, updated_files = Rewriter(
-            self.source_root, case, signature, normalized_bodies
+            self.source_root, case, signature, in_class_scope
         ).rewrite(extracted_method_code)
 
         return RefactorResult(
@@ -892,7 +564,7 @@ class ExtractMethodRefactorer:
             extracted_signature=signature,
             replacements=replacements,
             updated_files=updated_files,
-            diagnostics=diagnostics,
+            diagnostics=[],
         )
 
 
@@ -929,7 +601,7 @@ class ResultFormatter:
                         (repl.replacement_code for repl in result.replacements if repl.func_id == src.func_id),
                         "",
                     ),
-                    "ground_truth_after_VSCode_ref": src.ground_truth_after_vscode_ref,
+                    "ground_truth_after_vscode_ref": src.ground_truth_after_vscode_ref,
                 }
                 for src in case.sources
             ],
@@ -975,30 +647,19 @@ def main() -> None:
     parser.add_argument("--merged-report-name", type=str, default="all_refactor_results.json")
     args = parser.parse_args()
 
-    # Load the text content
     text = args.input.read_text(encoding="utf-8").strip()
 
-    # Determine if it's JSONL or standard JSON
     if text.startswith("[") and text.endswith("]"):
-        # It's a standard JSON array
         try:
             payloads = json.loads(text)
         except json.JSONDecodeError:
-            # Fallback for messy JSONL that happens to start/end with brackets
             payloads = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
-        # It's either JSONL or a single JSON object
         try:
-            # Try parsing as a single object first
             payload = json.loads(text)
             payloads = [payload] if isinstance(payload, dict) else payload
         except json.JSONDecodeError:
-            # Process as JSONL
-            payloads = [
-                json.loads(line)
-                for line in text.splitlines()
-                if line.strip()
-            ]
+            payloads = [json.loads(line) for line in text.splitlines() if line.strip()]
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1051,10 +712,6 @@ def main() -> None:
         print(f"[{idx}/{len(payloads)}] Finished: {case.classid}")
         for artifact in materialized_artifacts:
             print(f"Rewritten file written to: {artifact.output_path}")
-        if final_result.diagnostics:
-            print("Diagnostics:")
-            for diag in final_result.diagnostics:
-                print(f"  - {diag}")
 
     merged_report_path = args.output_dir / args.merged_report_name
     merged_report_path.write_text(json.dumps(merged_reports, indent=2), encoding="utf-8")

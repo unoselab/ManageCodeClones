@@ -34,8 +34,8 @@ Run the script by providing an input file containing clone data and the root dir
 
 ```bash
 python extract_method_refactor_python.py \
-  --input /path/to/clones.jsonl \
-  --source-root /path/to/source/code \
+  --input /home/user1-system11/research_dream/llm-clone/automate_extract_method_refactoring_py/data/sampled_pairs_refactored_true_20.jsonl \
+  --source-root /home/user1-system11/research_dream/llm-clone/detect_clones/NiCad-py-block \
   --output-dir ./output/refactor_out
 
 ```
